@@ -43,27 +43,6 @@
 			remoteGlobalIDString = E4B378252805D55200FD7417;
 			remoteInfo = Roboflow;
 		};
-		E4B378852805D5CC00FD7417 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = E4B3787F2805D5CC00FD7417 /* RoboflowTestApp.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = E4B3784C2805D5A600FD7417;
-			remoteInfo = RoboflowTestApp;
-		};
-		E4B378872805D5CC00FD7417 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = E4B3787F2805D5CC00FD7417 /* RoboflowTestApp.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = E4B378622805D5AB00FD7417;
-			remoteInfo = RoboflowTestAppTests;
-		};
-		E4B378892805D5CC00FD7417 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = E4B3787F2805D5CC00FD7417 /* RoboflowTestApp.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = E4B3786C2805D5AB00FD7417;
-			remoteInfo = RoboflowTestAppUITests;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
@@ -74,7 +53,6 @@
 		E4B3782A2805D55200FD7417 /* Roboflow.docc */ = {isa = PBXFileReference; lastKnownFileType = folder.documentationcatalog; path = Roboflow.docc; sourceTree = "<group>"; };
 		E4B378302805D55200FD7417 /* RoboflowTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RoboflowTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E4B378352805D55200FD7417 /* RoboflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoboflowTests.swift; sourceTree = "<group>"; };
-		E4B3787F2805D5CC00FD7417 /* RoboflowTestApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = RoboflowTestApp.xcodeproj; path = RoboflowTestApp/RoboflowTestApp.xcodeproj; sourceTree = "<group>"; };
 		E4B3788C2805D87C00FD7417 /* Roboflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Roboflow.swift; sourceTree = "<group>"; };
 		E4B3788F2805DEEB00FD7417 /* RFObjectDetectionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RFObjectDetectionModel.swift; sourceTree = "<group>"; };
 		E4D8CFC32A2A6E9400CDCB2B /* ThresholdProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThresholdProvider.swift; sourceTree = "<group>"; };
@@ -112,7 +90,6 @@
 		E4B3781C2805D55200FD7417 = {
 			isa = PBXGroup;
 			children = (
-				E4B3787F2805D5CC00FD7417 /* RoboflowTestApp.xcodeproj */,
 				E4B378282805D55200FD7417 /* Classes */,
 				E4B378342805D55200FD7417 /* RoboflowTests */,
 				E4B378272805D55200FD7417 /* Products */,
@@ -151,16 +128,6 @@
 				E4B378352805D55200FD7417 /* RoboflowTests.swift */,
 			);
 			path = RoboflowTests;
-			sourceTree = "<group>";
-		};
-		E4B378802805D5CC00FD7417 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				E4B378862805D5CC00FD7417 /* RoboflowTestApp.app */,
-				E4B378882805D5CC00FD7417 /* RoboflowTestAppTests.xctest */,
-				E4B3788A2805D5CC00FD7417 /* RoboflowTestAppUITests.xctest */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 		E4D8CFBF2A2A6E6900CDCB2B /* Extensions */ = {
@@ -259,12 +226,6 @@
 			);
 			productRefGroup = E4B378272805D55200FD7417 /* Products */;
 			projectDirPath = "";
-			projectReferences = (
-				{
-					ProductGroup = E4B378802805D5CC00FD7417 /* Products */;
-					ProjectRef = E4B3787F2805D5CC00FD7417 /* RoboflowTestApp.xcodeproj */;
-				},
-			);
 			projectRoot = "";
 			targets = (
 				E4B378252805D55200FD7417 /* Roboflow */,
@@ -273,30 +234,6 @@
 			);
 		};
 /* End PBXProject section */
-
-/* Begin PBXReferenceProxy section */
-		E4B378862805D5CC00FD7417 /* RoboflowTestApp.app */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.application;
-			path = RoboflowTestApp.app;
-			remoteRef = E4B378852805D5CC00FD7417 /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-		E4B378882805D5CC00FD7417 /* RoboflowTestAppTests.xctest */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.cfbundle;
-			path = RoboflowTestAppTests.xctest;
-			remoteRef = E4B378872805D5CC00FD7417 /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-		E4B3788A2805D5CC00FD7417 /* RoboflowTestAppUITests.xctest */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.cfbundle;
-			path = RoboflowTestAppUITests.xctest;
-			remoteRef = E4B378892805D5CC00FD7417 /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-/* End PBXReferenceProxy section */
 
 /* Begin PBXResourcesBuildPhase section */
 		E4B378242805D55200FD7417 /* Resources */ = {
