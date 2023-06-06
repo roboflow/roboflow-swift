@@ -39,7 +39,6 @@
 		E4B378262805D55200FD7417 /* Roboflow.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Roboflow.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		E4B378292805D55200FD7417 /* Roboflow.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Roboflow.h; sourceTree = "<group>"; };
 		E4B3782A2805D55200FD7417 /* Roboflow.docc */ = {isa = PBXFileReference; lastKnownFileType = folder.documentationcatalog; path = Roboflow.docc; sourceTree = "<group>"; };
-		E4B378352805D55200FD7417 /* RoboflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoboflowTests.swift; sourceTree = "<group>"; };
 		E4B3788C2805D87C00FD7417 /* Roboflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Roboflow.swift; sourceTree = "<group>"; };
 		E4B3788F2805DEEB00FD7417 /* RFObjectDetectionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RFObjectDetectionModel.swift; sourceTree = "<group>"; };
 		E4D8CFC32A2A6E9400CDCB2B /* ThresholdProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThresholdProvider.swift; sourceTree = "<group>"; };
@@ -70,7 +69,6 @@
 			isa = PBXGroup;
 			children = (
 				E4B378282805D55200FD7417 /* Classes */,
-				E4B378342805D55200FD7417 /* RoboflowTests */,
 				E4B378272805D55200FD7417 /* Products */,
 				BBB069FD2811ABED008AAC1C /* Frameworks */,
 			);
@@ -98,14 +96,6 @@
 				E4D8CFBF2A2A6E6900CDCB2B /* Extensions */,
 			);
 			path = Classes;
-			sourceTree = "<group>";
-		};
-		E4B378342805D55200FD7417 /* RoboflowTests */ = {
-			isa = PBXGroup;
-			children = (
-				E4B378352805D55200FD7417 /* RoboflowTests.swift */,
-			);
-			path = RoboflowTests;
 			sourceTree = "<group>";
 		};
 		E4D8CFBF2A2A6E6900CDCB2B /* Extensions */ = {
