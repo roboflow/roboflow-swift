@@ -6,14 +6,12 @@ let package = Package(
     name: "roboflow-swift",
     defaultLocalization: "en",
     platforms: [
-                .iOS(.v16),
-        ],
+        .iOS(.v16),
+    ],
     products: [
         .library(
             name: "Roboflow",
             targets: ["Roboflow"]),
-    ],
-    dependencies: [
     ],
     targets: [
         .target(
