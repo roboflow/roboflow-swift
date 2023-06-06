@@ -5,9 +5,7 @@ import PackageDescription
 let package = Package(
     name: "roboflow-swift",
     defaultLocalization: "en",
-    platforms: [
-        .iOS(.v16),
-    ],
+
     products: [
         .library(
             name: "Roboflow",
