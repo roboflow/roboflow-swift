@@ -1,16 +1,22 @@
-// swift-tools-version:5.5
+// swift-tools-version:5.8
 
 import PackageDescription
 
 let package = Package(
-    name: "RoboflowSwift",
+    name: "roboflow-swift",
     defaultLocalization: "en",
+    platforms: [
+        .iOS(.v16),
+    ],
     products: [
-        .library(name: "RoboflowSwift", targets: ["RoboflowSwift"]),
+        .library(
+            name: "Roboflow",
+            targets: ["Roboflow"]),
     ],
     targets: [
         .target(
             name: "Roboflow",
-            dependencies: []),
+            path: "Sources/Roboflow"
+        )
     ]
 )
