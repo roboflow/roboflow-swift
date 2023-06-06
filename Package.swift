@@ -3,19 +3,19 @@
 import PackageDescription
 
 let package = Package(
-    name: "Roboflow",
+    name: "roboflow-swift",
     defaultLocalization: "en",
     
     products: [
         .library(
-            name: "RoboflowSwift",
-            targets: ["RoboflowSwift"]),
+            name: "Roboflow",
+            targets: ["Roboflow"]),
     ],
     dependencies: [
     ],
     targets: [
         .target(
-            name: "RoboflowSwift",
+            name: "Roboflow",
             path: "Sources/Roboflow"
         )
     ]
