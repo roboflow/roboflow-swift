@@ -111,11 +111,11 @@ rf.uploadImage(image: image, project: project) { result in
 
     switch result {
         case .Success:
-						print("Image uploaded succesfully.")
+		print("Image uploaded succesfully.")
         case .Duplicate:
-            print("You attempted to upload a duplicate image.")
+        	print("You attempted to upload a duplicate image.")
         case .Error:
-            print("You attempted to upload a duplicate image.")
+		print("You attempted to upload a duplicate image.")
         @unknown default:
             return
     }
