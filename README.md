@@ -62,21 +62,21 @@ mlModel.detect(image: imageToDetect) { detections, errorr in
 To run inference on a video stream, you'll want to call the `detect(pixelBuffer: CVPixelBuffer, completion: **@escaping** (([RFObjectDetectionPrediction]?, Error?) -> Void))` function inside of your app's `AVCaptureVideoDataOutputSampleBufferDelegate` `captureOutput` delegate method: 
 
 ```
-    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-            return
-        }
-        currentPixelBuffer = pixelBuffer
-        
-        mlModel?.detect(pixelBuffer: pixelBuffer, completion: { detections, error in
-            if error != nil {
-                print(error!)
-            } else {
-                let detectionResults: [RFObjectDetectionPrediction] = detections!
-								...
-            }
-        })
+func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+    guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+        return
     }
+    currentPixelBuffer = pixelBuffer
+
+    mlModel?.detect(pixelBuffer: pixelBuffer, completion: { detections, error in
+        if error != nil {
+            print(error!)
+        } else {
+            let detectionResults: [RFObjectDetectionPrediction] = detections!
+            ...
+        }
+    })
+}
 ```
 
 The included example app shows a complete implemention illustrating this process of setting up and running an `AVCaptureSession`. 
@@ -115,13 +115,11 @@ rf.uploadImage(image: image, project: project) { result in
         case .Duplicate:
             print("You attempted to upload a duplicate image.")
         case .Error:
-
             print("You attempted to upload a duplicate image.")
         @unknown default:
             return
     }
 }
-
 ```
 
 
