@@ -1,5 +1,11 @@
 # roboflow-swift-sdk	
 
+<p align="center">
+    </br>
+    <img width="100" src="https://github.com/roboflow-ai/notebooks/raw/main/assets/roboflow_logomark_color.svg" alt="roboflow logo">
+    </br>
+</p>
+
 This is the source code for the Roboflow Swift SDK. It allows you to run [Object Detection](https://blog.roboflow.com/object-detection/) models locally on your iOS device that you have trained or have been trained on [Roboflow Universe](https://universe.roboflow.com) by others. The SDK pulls down the CoreML version of the trained model and caches it lcoally for running inference on the edge. 
 
 
@@ -122,7 +128,7 @@ rf.uploadImage(image: image, project: project) { result in
 
 ## Example App ##
 
-The repo includs an exmaple project that will illustrate how to you use the Roboflow SDK on an iOS app. The model is a pre-trained model hosted on Roboflow Unierse for detecting the actions in a round of rock-paper-scissors. You'll have to provide your own API key. 
+An example app can be found [here](https://github.com/roboflow/roboflow-swift-examples) that illusrates how to use the Roboflow SDK on an iOS app. The app uses apre-trained model hosted on Roboflow Universe for detecting the actions in a round of rock-paper-scissors. You'll have to provide your own API key. 
 
 
 
