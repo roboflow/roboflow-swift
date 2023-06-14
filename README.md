@@ -167,3 +167,4 @@ To install with Cocoapods, make sure you have Cocoapods already installed and ad
 
 Then, run `pod install` in the root directory of your project. 
 
+If you've previously installed the Roboflow SDK via Cocoapods, you'll need to update your podfile to have an entry of `pod Roboflow`. 
