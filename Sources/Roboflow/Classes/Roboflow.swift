@@ -111,71 +111,43 @@ public class RoboflowMobile: NSObject {
     
     //Get the model metadata from the Roboflow API
     private func getModelData(modelName: String, modelVersion: Int, apiKey: String, deviceID: String, completion: @escaping (URL?, Error?, String, String, [String: String]?, [String]?)->()) {
-            
         getConfigData(modelName: modelName, modelVersion: modelVersion, apiKey: apiKey, deviceID: deviceID) { data, error in
-            if error == nil {
-                if data == nil {
-                    completion(nil, error, "", "", nil, nil)
-                }
-                
-                if let dataError: [String: Any] = data!["error"] as? [String: Any] {
-                    completion(nil, error, "", "", nil, nil)
-                }
-                
-                guard let coreMLDict: [String : Any] = data!["coreml"] as? [String : Any] else {
-                    completion(nil, error, "", "", nil, nil)
-                    return
-                }
-                
-                guard let name: String = coreMLDict["name"] as? String else {
-                    completion(nil, error, "", "", nil, nil)
-                    return
-                }
-                
-                guard let annotation: String = coreMLDict["annotation"] as? String else {
-                    completion(nil, error, "", "", nil, nil)
-                    return
-                }
-                
-                guard let modelType: String = coreMLDict["type"] as? String else {
-                    completion(nil, error, "", "", nil, nil)
-                    return
-                }
-                
-                guard let modelURLString: String = coreMLDict["model"] as? String else {
-                    completion(nil, error, "", "", nil, nil)
-                    return
-                }
-                
-                guard let modelURL: URL = URL(string: modelURLString) else {
-                    completion(nil, error, "", "", nil, nil)
-                    return
-                }
-                
-                guard let classes: [String] = coreMLDict["classes"] as? [String] else {
-                    completion(nil, error, "", "", nil, nil)
-                    return
-                }
-                
-                let colors: [String: String]? = coreMLDict["colors"] as? [String: String]
-                                
-                //Download the model from the link in the API response
-                self.downloadModelFile(modelName: "\(modelName)-\(modelVersion).mlmodel", modelVersion: modelVersion, modelURL: modelURL) { fetchedModel, error in
-                    if error != nil {
-                        completion(nil, error, "", "", nil, nil)
-                    }
-                    if let fetchedModel = fetchedModel {
-                        _ = self.cacheModelInfo(modelName: modelName, modelVersion: modelVersion, colors: colors ?? [:], classes: classes, name: name, modelType: modelType, compiledModelURL: fetchedModel)
-                        completion(fetchedModel, nil, name, modelType, colors, classes)
-                    } else {
-                        completion(nil, error, "", "", nil, nil)
-                    }
-                }
-            } else {
+            if let error = error {
                 completion(nil, error, "", "", nil, nil)
+                return
+            }
+            
+            guard let data = data,
+                  let coreMLDict = data["coreml"] as? [String: Any],
+                  let name = coreMLDict["name"] as? String,
+                  let modelType = coreMLDict["modelType"] as? String,
+                  let modelURLString = coreMLDict["model"] as? String,
+                  let modelURL = URL(string: modelURLString) else {
+                completion(nil, error, "", "", nil, nil)
+                return
+            }
+            
+            let colors = coreMLDict["colors"] as? [String: String]
+            let classes = coreMLDict["classes"] as? [String]
+            
+            
+            //Download the model from the link in the API response
+            self.downloadModelFile(modelName: "\(modelName)-\(modelVersion).mlmodel", modelVersion: modelVersion, modelURL: modelURL) { fetchedModel, error in
+                if let error = error {
+                    completion(nil, error, "", "", nil, nil)
+                    return
+                }
+                
+                if let fetchedModel = fetchedModel {
+                    _ = self.cacheModelInfo(modelName: modelName, modelVersion: modelVersion, colors: colors ?? [:], classes: classes ?? [], name: name, modelType: modelType, compiledModelURL: fetchedModel)
+                    completion(fetchedModel, nil, name, modelType, colors, classes)
+                } else {
+                    completion(nil, error, "", "", nil, nil)
+                }
             }
         }
     }
+
 
     private func cacheModelInfo(modelName: String, modelVersion: Int, colors: [String: String], classes: [String], name: String, modelType: String, compiledModelURL: URL) -> [String: Any]? {
         let modelInfo: [String : Any] = [
