@@ -83,7 +83,7 @@ public class RoboflowMobile: NSObject {
     }
     
     func getConfigData(modelName: String, modelVersion: Int, apiKey: String, deviceID: String, completion: @escaping (([String: Any]?, Error?) -> Void)) {
-        var request = URLRequest(url: URL(string: "https://api.roboflow.com/coreml/\(modelName)/\(String(modelVersion))?api_key=\(apiKey)&device=\(deviceID)")!,timeoutInterval: Double.infinity)
+        var request = URLRequest(url: URL(string: "https://api.roboflow.com/coreml/\(modelName)/\(String(modelVersion))?api_key=\(apiKey)&device=\(deviceID)&bundle=\(String(describing: Bundle.main.bundleIdentifier))")!,timeoutInterval: Double.infinity)
         request.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpMethod = "GET"
         
