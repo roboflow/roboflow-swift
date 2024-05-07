@@ -9,7 +9,6 @@ import Foundation
 import CoreML
 import Vision
 import UIKit
-
 //Creates an instance of an ML model that's hosted on Roboflow
 public class RFObjectDetectionModel: NSObject {
 

@@ -17,6 +17,7 @@ let package = Package(
         .target(
             name: "Roboflow",
             path: "Sources/Roboflow"
-        )
+        ),
+        .testTarget(name:"RoboflowTests", dependencies: ["Roboflow"])
     ]
 )
