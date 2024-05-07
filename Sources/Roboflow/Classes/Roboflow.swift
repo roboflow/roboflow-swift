@@ -51,6 +51,7 @@ public class RoboflowMobile: NSObject {
                 clearAndRetryLoadingModel(model, modelVersion, completion)
             }
         } else if retries > 0 {
+            clearModelCache(modelName: model, modelVersion: modelVersion)
             retries -= 1
             getModelData(modelName: model, modelVersion: modelVersion, apiKey: apiKey, deviceID: deviceID) { [self] fetchedModel, error, modelName, modelType, colors, classes in
                 if let err = error {
@@ -171,7 +172,7 @@ public class RoboflowMobile: NSObject {
     private func loadModelCache(modelName: String, modelVersion: Int) -> [String: Any]? {
         do {
             if let modelInfoData = UserDefaults.standard.data(forKey: "\(modelName)-\(modelVersion)") {
-                let decodedData = try NSKeyedUnarchiver.unarchivedObject(ofClass: NSDictionary.self, from: modelInfoData) as? [String: Any]
+                let decodedData = try NSKeyedUnarchiver.unarchivedObject(ofClasses: [NSDictionary.self, NSString.self, NSArray.self], from: modelInfoData) as? [String: Any]
                 return decodedData
             } else {
                 print("Error: Could not find data for key \(modelName)-\(modelVersion)")
