@@ -37,6 +37,9 @@ public class RoboflowMobile: NSObject {
             let colors = modelInfo["colors"] as? [String: String],
             let name = modelInfo["name"] as? String,
             let modelType = modelInfo["modelType"] as? String {
+            
+            getConfigDataBackground(modelName: model, modelVersion: modelVersion, apiKey: apiKey, deviceID: deviceID)
+            
             let objectDetectionModel = RFObjectDetectionModel()
 
             do {
@@ -45,7 +48,7 @@ public class RoboflowMobile: NSObject {
                                                                 appropriateFor: nil,
                                                                 create: false)
                 _ = objectDetectionModel.loadMLModel(modelPath: documentsURL.appendingPathComponent(modelURL), colors: colors)
-
+                
                 completion(objectDetectionModel, nil, name, modelType)
             } catch {
                 clearAndRetryLoadingModel(model, modelVersion, completion)
@@ -107,6 +110,12 @@ public class RoboflowMobile: NSObject {
                 completion(nil, error.localizedDescription)
             }
         }).resume()
+    }
+    
+    private func getConfigDataBackground(modelName: String, modelVersion: Int, apiKey: String, deviceID: String) {
+        DispatchQueue.global(qos: .background).async {
+            getConfigData(modelName: modelName, modelVersion: modelVersion, apiKey: apiKey, deviceID: deviceID, completion: {})
+        }
     }
     
     
