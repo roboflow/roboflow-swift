@@ -114,7 +114,7 @@ public class RoboflowMobile: NSObject {
     
     private func getConfigDataBackground(modelName: String, modelVersion: Int, apiKey: String, deviceID: String) {
         DispatchQueue.global(qos: .background).async {
-            getConfigData(modelName: modelName, modelVersion: modelVersion, apiKey: apiKey, deviceID: deviceID, completion: {})
+            self.getConfigData(modelName: modelName, modelVersion: modelVersion, apiKey: apiKey, deviceID: deviceID, completion: {_,_ in })
         }
     }
     
