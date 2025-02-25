@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
   spec.name               = "Roboflow"
-  spec.version            = "1.1.21"
+  spec.version            = "1.1.22"
   spec.platform           = :ios, '15.2'
   spec.ios.deployment_target = '15.2'
   spec.summary            = "A framework for interfacing with Roboflow"
