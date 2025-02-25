@@ -6,8 +6,7 @@
 //
 
 import Foundation
-
-extension String: Error {
+extension String: @retroactive Error {
     
     func convertToDictionary(text: String) -> [String: Any]? {
         if let data = text.data(using: .utf8) {
