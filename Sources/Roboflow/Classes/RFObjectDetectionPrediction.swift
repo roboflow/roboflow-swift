@@ -8,7 +8,7 @@
 import Foundation
 import UIKit
 
-public struct RFObjectDetectionPrediction {
+public class RFObjectDetectionPrediction: RFPrediction {
     let x: Float
     let y: Float
     let width: Float
@@ -18,7 +18,18 @@ public struct RFObjectDetectionPrediction {
     let color: UIColor
     let box: CGRect
     
-    public func getValues() -> [String: Any] {
+    public init(x: Float, y: Float, width: Float, height: Float, className: String, confidence: Float, color: UIColor, box: CGRect) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.className = className
+        self.confidence = confidence
+        self.color = color
+        self.box = box
+    }
+    
+    public override func getValues() -> [String: Any] {
         let ciColor = CIColor(color: color)
         let rgbColor = [Int(ciColor.red * 255), Int(ciColor.green * 255), Int(ciColor.blue * 255)]
         let result = [

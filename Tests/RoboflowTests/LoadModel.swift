@@ -12,7 +12,7 @@ import Roboflow
 var API_KEY = "fEto4us79wdzRJ2jkO6U"
 
 final class LoadModel: XCTestCase {
-    var model: RFObjectDetectionModel?
+    var model: RFModel?
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
@@ -28,5 +28,14 @@ final class LoadModel: XCTestCase {
         self.model = model
         XCTAssertNil(error)
     }
+    
+    func testLoadSeg() async {
+        let rf = RoboflowMobile(apiKey: API_KEY)
+        let (model, error, str1, str2) = await rf.load(model: "hat-1wxze-g6xvw", modelVersion: 1)
+        self.model = model
+        print(model)
+        XCTAssertNil(error)
+    }
+    
 
 }

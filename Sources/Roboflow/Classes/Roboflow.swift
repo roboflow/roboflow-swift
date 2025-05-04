@@ -10,6 +10,7 @@ import CoreML
 import Vision
 
 ///Interface for interacting with the Roboflow API
+@available(iOS 18.0, *)
 public class RoboflowMobile: NSObject {
     
     var apiKey: String!
@@ -29,27 +30,36 @@ public class RoboflowMobile: NSObject {
         self.deviceID = deviceID
     }
     
+    func getModelClass(modelType: String) -> RFModel {
+        if (modelType.contains("seg")) {
+            print("initializing rf segmentation model")
+            return RFInstanceSegmentationModel()
+        }
+        return RFObjectDetectionModel()
+    }
+    
     //Start the process of fetching the CoreMLModel
     @available(*, renamed: "load(model:modelVersion:)")
-    public func load(model: String, modelVersion: Int, completion: @escaping (RFObjectDetectionModel?, Error?, String, String)->()) {
+    public func load(model: String, modelVersion: Int, completion: @escaping (RFModel?, Error?, String, String)->()) {
         if let modelInfo = loadModelCache(modelName: model, modelVersion: modelVersion),
             let modelURL = modelInfo["compiledModelURL"] as? String,
             let colors = modelInfo["colors"] as? [String: String],
+           let classes = modelInfo["classes"] as? [String],
             let name = modelInfo["name"] as? String,
             let modelType = modelInfo["modelType"] as? String {
             
             getConfigDataBackground(modelName: model, modelVersion: modelVersion, apiKey: apiKey, deviceID: deviceID)
             
-            let objectDetectionModel = RFObjectDetectionModel()
+            let modelObject = getModelClass(modelType: modelType)
 
             do {
                 let documentsURL = try FileManager.default.url(for: .documentDirectory,
                                                                 in: .userDomainMask,
                                                                 appropriateFor: nil,
                                                                 create: false)
-                _ = objectDetectionModel.loadMLModel(modelPath: documentsURL.appendingPathComponent(modelURL), colors: colors)
+                _ = modelObject.loadMLModel(modelPath: documentsURL.appendingPathComponent(modelURL), colors: colors, classes: classes)
                 
-                completion(objectDetectionModel, nil, name, modelType)
+                completion(modelObject, nil, name, modelType)
             } catch {
                 clearAndRetryLoadingModel(model, modelVersion, completion)
             }
@@ -60,9 +70,9 @@ public class RoboflowMobile: NSObject {
                 if let err = error {
                     completion(nil, err, "", "")
                 } else if let fetchedModel = fetchedModel {
-                    let objectDetectionModel = RFObjectDetectionModel()
-                    _ = objectDetectionModel.loadMLModel(modelPath: fetchedModel, colors: colors ?? [:])
-                    completion(objectDetectionModel, nil, modelName, modelType)
+                    let modelObject = getModelClass(modelType: modelType)
+                    _ = modelObject.loadMLModel(modelPath: fetchedModel, colors: colors ?? [:], classes: classes ?? [])
+                    completion(modelObject, nil, modelName, modelType)
                 } else {
                     print("No Model Found. Trying Again.")
                     clearAndRetryLoadingModel(model, modelVersion, completion)
@@ -73,12 +83,12 @@ public class RoboflowMobile: NSObject {
         }
     }
 
-    private func clearAndRetryLoadingModel(_ model: String, _ modelVersion: Int, _ completion: @escaping (RFObjectDetectionModel?, Error?, String, String)->()) {
+    private func clearAndRetryLoadingModel(_ model: String, _ modelVersion: Int, _ completion: @escaping (RFModel?, Error?, String, String)->()) {
         clearModelCache(modelName: model, modelVersion: modelVersion)
         self.load(model: model, modelVersion: modelVersion, completion: completion)
     }
 
-    public func load(model: String, modelVersion: Int) async -> (RFObjectDetectionModel?, Error?, String, String) {
+    public func load(model: String, modelVersion: Int) async -> (RFModel?, Error?, String, String) {
         return await withCheckedContinuation { continuation in
             load(model: model, modelVersion: modelVersion) { result1, result2, result3, result4 in
                 continuation.resume(returning: (result1, result2, result3, result4))

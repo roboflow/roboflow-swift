@@ -8,10 +8,14 @@ let package = Package(
     platforms: [
         .iOS(.v16),
     ],
+    
     products: [
         .library(
             name: "Roboflow",
             targets: ["Roboflow"]),
+    ],
+    dependencies: [
+        .package(url: "git@github.com:qoncept/TensorSwift.git", from: "0.2.0"),
     ],
     targets: [
         .target(

@@ -10,7 +10,7 @@ import CoreML
 import Vision
 import UIKit
 //Creates an instance of an ML model that's hosted on Roboflow
-public class RFObjectDetectionModel: NSObject {
+public class RFObjectDetectionModel: RFModel {
 
     public override init() {
         super.init()
@@ -22,13 +22,10 @@ public class RFObjectDetectionModel: NSObject {
     var maxObjects: Float = 20.0
     var colors: [String: String]!
     //Stores the retreived ML model
-    var mlModel: MLModel!
-    var visionModel: VNCoreMLModel!
-    var coreMLRequest: VNCoreMLRequest!
-    private var thresholdProvider = ThresholdProvider()
+    var thresholdProvider = ThresholdProvider()
     
     //Configure the parameters for the model
-    public func configure(threshold: Double, overlap: Double, maxObjects: Float) {
+    public override func configure(threshold: Double, overlap: Double, maxObjects: Float) {
         self.threshold = threshold
         self.overlap = overlap
         self.maxObjects = maxObjects
@@ -40,7 +37,7 @@ public class RFObjectDetectionModel: NSObject {
     }
     
     //Load the retrieved CoreML model into an already created RFObjectDetectionModel instance
-    func loadMLModel(modelPath: URL, colors: [String: String]) -> Error? {
+    override func loadMLModel(modelPath: URL, colors: [String: String], classes: [String]) -> Error? {
         self.colors = colors
         do {
             let config = MLModelConfiguration()
@@ -58,7 +55,7 @@ public class RFObjectDetectionModel: NSObject {
     
     //Run image through model and return Detections
     @available(*, renamed: "detect(image:)")
-    public func detect(image:UIImage, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
+    public override func detect(image:UIImage, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
         guard let coreMLRequest = self.coreMLRequest else {
             completion(nil, "Model initialization failed.")
             return
@@ -92,49 +89,4 @@ public class RFObjectDetectionModel: NSObject {
             completion(nil, error)
         }
     }
-    
-    public func detect(image: UIImage) async -> ([RFObjectDetectionPrediction]?, Error?) {
-        return await withCheckedContinuation { continuation in
-            detect(image: image) { result, error in
-                continuation.resume(returning: (result, error))
-            }
-        }
-    }
-    
-    public func detect(pixelBuffer: CVPixelBuffer, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
-        let image = UIImage(pixelBuffer: pixelBuffer)
-        detect(image: image!) { detections, error in
-            completion(detections, nil)
-        }
-    }
- 
-    public func detect(pixelBuffer: CVPixelBuffer) async -> ([RFObjectDetectionPrediction]?, Error?) {
-        return await withCheckedContinuation { continuation in
-            detect(pixelBuffer: pixelBuffer) { result, error in
-                continuation.resume(returning: (result, error))
-            }
-        }
-    }
-}
-
-func hexStringToUIColor (hex:String) -> UIColor {
-    var cString:String = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-
-    if (cString.hasPrefix("#")) {
-        cString.remove(at: cString.startIndex)
-    }
-
-    if ((cString.count) != 6) {
-        return UIColor.gray
-    }
-
-    var rgbValue:UInt64 = 0
-    Scanner(string: cString).scanHexInt64(&rgbValue)
-
-    return UIColor(
-        red: CGFloat((rgbValue & 0xFF0000) >> 16) / 255.0,
-        green: CGFloat((rgbValue & 0x00FF00) >> 8) / 255.0,
-        blue: CGFloat(rgbValue & 0x0000FF) / 255.0,
-        alpha: CGFloat(1.0)
-    )
 }

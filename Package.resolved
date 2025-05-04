@@ -1,0 +1,14 @@
+{
+  "pins" : [
+    {
+      "identity" : "tensorswift",
+      "kind" : "remoteSourceControl",
+      "location" : "git@github.com:qoncept/TensorSwift.git",
+      "state" : {
+        "revision" : "f4616d049b2d5dc89ed537ad6532a505f2d3391d",
+        "version" : "0.2.3"
+      }
+    }
+  ],
+  "version" : 2
+}
