@@ -202,7 +202,7 @@ public class RoboflowMobile: NSObject {
         return nil
     }
 
-    private func clearModelCache(modelName: String, modelVersion: Int) {
+    public func clearModelCache(modelName: String, modelVersion: Int) {
         UserDefaults.standard.removeObject(forKey: "\(modelName)-\(modelVersion)")
     }
     
