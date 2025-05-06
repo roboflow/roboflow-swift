@@ -10,7 +10,6 @@ import CoreML
 import Vision
 
 ///Interface for interacting with the Roboflow API
-@available(iOS 18.0, *)
 public class RoboflowMobile: NSObject {
     
     var apiKey: String!
