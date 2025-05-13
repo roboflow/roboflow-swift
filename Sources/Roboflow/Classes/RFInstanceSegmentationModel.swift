@@ -79,8 +79,6 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
             // --- flatten MLMultiArray to Swift [Float] for speed
             let p = pred.dataPointer.bindMemory(to: Float.self,
                                                 capacity: pred.count)
-            let protoPtr = proto.dataPointer.bindMemory(to: Float.self,
-                                                        capacity: proto.count)
             let preds = UnsafeBufferPointer(start: p, count: pred.count)
             let protoShape = (c:Int(truncating: proto.shape[1]),
                               h:Int(truncating: proto.shape[2]),
@@ -92,7 +90,6 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
             
             var detRows = [[Float]]()
             var coeffs  = [[Float]]()
-            var detections = [RFObjectDetectionPrediction]()
             
                     
             for i in 0..<numDet {
@@ -142,12 +139,10 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
             for keep in kept {
                 guard let idx = detRows.firstIndex(where: { $0.elementsEqual(keep) }) else { continue }
                 
-                let x = (keep[0] + keep[2])/2
-                let y = (keep[1] + keep[3])/2
                 let width = (keep[2] - keep[0])
                 let height = (keep[3] - keep[1])
                 let minX = CGFloat(keep[0])
-                let minY = 640 - CGFloat(keep[1] + height)
+                let minY = CGFloat(keep[1])
                 let xs = imgWidth / 640
                 let ys = imgHeight / 640
                 let box = CGRect(x: CGFloat(minX*xs), y: CGFloat(minY*ys), width: CGFloat(width)*xs, height: CGFloat(height)*ys)
@@ -185,7 +180,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                     let box = boxesKeep[i]
                     
                     let classname = classes[Int(keep[5])]
-                    let detection = RFInstanceSegmentationPrediction(x: Float(box.midX), y: Float(h) - Float(box.midY), width: Float(box.width), height: Float(box.height), className: classname, confidence: keep[4], color: hexStringToUIColor(hex: colors[classname] ?? "#ff0000"), box: box, points:polygon, mask: maskBin)
+                    let detection = RFInstanceSegmentationPrediction(x: Float(box.midX), y: Float(box.midY), width: Float(box.width), height: Float(box.height), className: classname, confidence: keep[4], color: hexStringToUIColor(hex: colors[classname] ?? "#ff0000"), box: box, points:polygon, mask: maskBin)
                     final.append(detection)
                 }
             }
@@ -233,13 +228,14 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
             protoShape: (c: Int, h: Int, w: Int),
             coeffs: [[Float]],                // flat [nDet*c]
             outH: Int, outW: Int
-        ) -> MLTensor {                    // one crop per detection
+        ) -> MLTensor? {                    // one crop per detection
             let (c, mh, mw) = protoShape
             let shapedProto = MLShapedArray<Float>(proto)
             var masks = MLTensor(shapedProto)
             masks = masks.reshaped(to: [c, mh * mw])
             
             let rows = coeffs.count
+            if (rows == 0) { return nil }
             let cols = coeffs.first!.count     // assume rectangular
 
             let flat = coeffs.flatMap { $0 }   // [Float] length = rows*cols
@@ -293,11 +289,13 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                                         dets: [CGRect],
                                         imgH: Int,
                                         imgW: Int) -> [[[UInt8]]] {
-            let rawMasks = preprocessSegmentationMasks(proto: proto,
+            guard let rawMasks = preprocessSegmentationMasks(proto: proto,
                                                        protoShape: protoShape,
                                                        coeffs: coeffs,
-                                                       outH: imgH, outW: imgW)
-            let masks = rawMasks.resized(to: (imgW, imgH), method: .bilinear(alignCorners: false))
+                                                             outH: imgH, outW: imgW) else {
+                return []
+            }
+            let masks = rawMasks.resized(to: (imgH, imgW), method: .bilinear(alignCorners: false))
             
             let (h, w) = (masks.shape[1], masks.shape[2])
             let nDet = dets.count
@@ -311,7 +309,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
             let c = MLTensor(MLShapedArray<Float>(scalars: colVector, shape: [h]))
                         .reshaped(to: [1, h, 1])
             var result = [[[UInt8]]]()
-            for i in 0..<nDet {
+            for i in 0..<(nDet) {
                 // get detection
                 let det = dets[i]
                 let x1 = Float(det.minX)
@@ -319,14 +317,19 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                 let x2 = Float(det.maxX)
                 let y2 = Float(det.maxY)
                 
+                print("x1 \(x1), y1 \(y1), x2 \(x2), y2 \(y2)")
+                
+                
                 let rotatedMask = masks[i]
                 
                 let kx = (r .> (x1))
                 
-                let keep = kx .&     // r >= x1
-                (r .< x2) .&    // & r < x2
-                (c .> (Float(h)-y2)) .&
-                (c .< (Float(h)-y1 ))   // final shape [nDet,h,w]
+                // c .> Float(h)/2.0 -> left half visible
+                // r .> Float(w)/2.0 -> bottom half
+                let keep = c .< y2 .& c .> y1 .& r .< x2 .& r .> x1
+//                (r .< x2) .&    // & r < x2
+//                (c .> (Float(h)-y2)) .&
+//                (c .< (Float(h)-y1 ))   // final shape [nDet,h,w]
                 
                 let cropped = rotatedMask * keep
                 
@@ -340,8 +343,8 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                                                        count: h)
                 let scalars = shaped.scalars                      // flat Float buffer
                     var offset  = 0
-                        for y in 0..<h {
-                            for x in 0..<w {
+                for y in 0..<h {
+                    for x in 0..<w {
                                 let p = scalars[offset]
                                 out[y][x] = p < 0.5 ? 0 : 255
                                 offset += 1
@@ -449,7 +452,7 @@ func shapedArraySync<T: MLTensorScalar>(
     let sema = DispatchSemaphore(value: 0)
     var result: Result<MLShapedArray<T>, Error>!
 
-    Task.detached {
+    Task(priority: .userInitiated) {
         let sa = await tensor.shapedArray(of: T.self)
         result = .success(sa)
         sema.signal()
