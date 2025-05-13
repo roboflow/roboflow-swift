@@ -12,7 +12,6 @@ import UIKit
 import Accelerate
 
 //Creates an instance of an ML model that's hosted on Roboflow
-@available(iOS 18.0, *)
 public class RFInstanceSegmentationModel: RFObjectDetectionModel {
     var classes = [String]()
     //Load the retrieved CoreML model into an already created RFObjectDetectionModel instance
@@ -158,34 +157,37 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                 keeps.append(keep)
                 
             }
+            if #available(iOS 18.0, *) {
                 let maskBins = MaskUtils.processMaskAccurate(proto: proto,
-                                                            protoShape: protoShape,
-                                                            coeffs: coeffsKeep,
-                                                            dets: boxesKeep,
-                                                            imgH: Int(image.size.height), imgW: Int(image.size.width))
-            for (i, maskBin) in maskBins.enumerated() {
-                let h = maskBin.count                 // rows
-                let w = maskBin.first!.count          // cols
-                let flatMask: [UInt8] = maskBin.flatMap { $0 }
+                                                             protoShape: protoShape,
+                                                             coeffs: coeffsKeep,
+                                                             dets: boxesKeep,
+                                                             imgH: Int(image.size.height), imgW: Int(image.size.width))
                 
-                let polys = try? MaskUtils.maskToPolygons(mask: flatMask, width: w, height: h)
-                
-                var polygon = [CGPoint]()
-                if let polygons = polys {
-                    if polygons.count > 0 {
-                        polygon = polygons[0]
-                        if (polygon.count > 0) {
-                            polygon.append(polygon.first!)
+                for (i, maskBin) in maskBins.enumerated() {
+                    let h = maskBin.count                 // rows
+                    let w = maskBin.first!.count          // cols
+                    let flatMask: [UInt8] = maskBin.flatMap { $0 }
+                    
+                    let polys = try? MaskUtils.maskToPolygons(mask: flatMask, width: w, height: h)
+                    
+                    var polygon = [CGPoint]()
+                    if let polygons = polys {
+                        if polygons.count > 0 {
+                            polygon = polygons[0]
+                            if (polygon.count > 0) {
+                                polygon.append(polygon.first!)
+                            }
                         }
                     }
+                    
+                    let keep = keeps[i]
+                    let box = boxesKeep[i]
+                    
+                    let classname = classes[Int(keep[5])]
+                    let detection = RFInstanceSegmentationPrediction(x: Float(box.midX), y: Float(h) - Float(box.midY), width: Float(box.width), height: Float(box.height), className: classname, confidence: keep[4], color: hexStringToUIColor(hex: colors[classname] ?? "#ff0000"), box: box, points:polygon, mask: maskBin)
+                    final.append(detection)
                 }
-                
-                let keep = keeps[i]
-                let box = boxesKeep[i]
-                
-                let classname = classes[Int(keep[5])]
-                let detection = RFInstanceSegmentationPrediction(x: Float(box.midX), y: Float(h) - Float(box.midY), width: Float(box.width), height: Float(box.height), className: classname, confidence: keep[4], color: hexStringToUIColor(hex: colors[classname] ?? "#ff0000"), box: box, points:polygon, mask: maskBin)
-                final.append(detection)
             }
             
             completion(final, nil)
