@@ -1,4 +1,4 @@
-// swift-tools-version:5.8
+// swift-tools-version:5.9
 
 import PackageDescription
 
@@ -14,13 +14,11 @@ let package = Package(
             name: "Roboflow",
             targets: ["Roboflow"]),
     ],
-    dependencies: [
-        .package(url: "git@github.com:qoncept/TensorSwift.git", from: "0.2.0"),
-    ],
+    dependencies: [],
     targets: [
         .target(
             name: "Roboflow",
-            path: "Sources/Roboflow"
+            dependencies: [], path: "Sources/Roboflow"
         ),
         .testTarget(name:"RoboflowTests", dependencies: ["Roboflow"])
     ]

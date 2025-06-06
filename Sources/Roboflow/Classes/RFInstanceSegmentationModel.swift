@@ -11,9 +11,23 @@ import Vision
 import UIKit
 import Accelerate
 
+enum MaskProcessingMode {
+    case quality
+    case balanced
+    case performance
+}
+
+@available(iOS 18.0, *)
+let gpuOnly      = MLComputePolicy(.cpuAndGPU)              // force GPU
+@available(iOS 18.0, *)
+let anePreferred = MLComputePolicy(.cpuAndNeuralEngine)   // CPU-fallback, prefer ANE
+@available(iOS 18.0, *)
+let anyFast      = MLComputePolicy(.all)                  // let Core ML choose
+
 //Creates an instance of an ML model that's hosted on Roboflow
 public class RFInstanceSegmentationModel: RFObjectDetectionModel {
     var classes = [String]()
+    var maskProcessingMode: MaskProcessingMode = .balanced
     //Load the retrieved CoreML model into an already created RFObjectDetectionModel instance
     override func loadMLModel(modelPath: URL, colors: [String: String], classes: [String]) -> Error? {
         print("loading instance seg coreml model")
@@ -48,6 +62,8 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
     public override func detect(image:UIImage, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
         let imgHeight = CGFloat(image.size.height)
         let imgWidth = CGFloat(image.size.width)
+        
+        let outputSize = self.maskProcessingMode == .balanced ? CGSize(width: 640, height: 640) : CGSize(width: imgWidth, height: imgHeight)
         guard let coreMLRequest = self.coreMLRequest else {
             completion(nil, "Model initialization failed.")
             return
@@ -56,12 +72,32 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
             completion(nil, "Image failed.")
             return
         }
-        let handler = VNImageRequestHandler(ciImage: ciImage, options: [:])
+        
+        // resize image to input dimmensions
+        let resizeFilter = CIFilter(name:"CILanczosScaleTransform")!
+
+        // Desired output size
+        let targetSize = CGSize(width: 640, height: 640)
+
+        // Compute scale and corrective aspect ratio
+        let scale = targetSize.height / (ciImage.extent.height)
+        let aspectRatio = targetSize.width/((ciImage.extent.width) * scale)
+
+        // Apply resizing
+        resizeFilter.setValue(ciImage, forKey: kCIInputImageKey)
+        resizeFilter.setValue(scale, forKey: kCIInputScaleKey)
+        resizeFilter.setValue(aspectRatio, forKey: kCIInputAspectRatioKey)
+        let outputImage = resizeFilter.outputImage
+        
+        let handler = VNImageRequestHandler(ciImage: outputImage!, options: [:])
 
         do {
+            let t0 = Date()
             try handler.perform([coreMLRequest])
-            
             guard let detectResults = coreMLRequest.results else { return }
+            
+            // print("Model Inference Time: \(Date().timeIntervalSince(t0)) seconds")
+            let t1 = Date()
             
             let predictions = detectResults[1] as! VNCoreMLFeatureValueObservation
             let protos = detectResults[0] as! VNCoreMLFeatureValueObservation
@@ -91,44 +127,75 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
             var detRows = [[Float]]()
             var coeffs  = [[Float]]()
             
+            // print("multi array processing took: \(Date().timeIntervalSince(t1)) seconds")
+            let t2a = Date()
                     
-            for i in 0..<numDet {
-                var coords = [Float]()
-                for j in 0..<4 {
-                    coords.append(preds[j*numDet + i])
+            // MARK: -- constants and helpers
+            let spatial   = numDet                         // number of rows in a “column block”
+
+            // pre-allocate results to avoid repeated realloc
+            detRows.reserveCapacity(pred.shape[2].intValue)
+            coeffs .reserveCapacity(pred.shape[2].intValue)
+
+            // flatten MLMultiArray to raw Float pointer
+            let basePtr = pred.dataPointer.assumingMemoryBound(to: Float.self)
+
+            // lock for the result buffers (used only when we keep a detection)
+            let outLock = NSLock()
+
+            // MARK: -- parallel pass over detections
+            DispatchQueue.concurrentPerform(iterations: numDet) { i in
+                // ---- read bbox (cx,cy,w,h)  ----
+                @inline(__always) func col(_ k: Int) -> Float {
+                    basePtr[k * spatial + i]       // fast pointer math, no multiply in inner loops
                 }
-                
-                var confidences = [Float]()
-                for j in 4..<4+numCls {
-                    confidences.append(preds[j*numDet + i])
+                let cx = col(0), cy = col(1)
+                let w  = col(2), h  = col(3)
+
+                // ---- arg-max over class scores ----
+                var bestScore: Float = 0
+                var bestCls  : Int   = -1
+                var k = 4                         // first class score column
+                while k < 4 + numCls {
+                    let s = col(k)
+                    if s > bestScore { bestScore = s; bestCls = k-4 }
+                    k &+= 1
                 }
-                
-                var coeff = [Float]()
-                for j in 4+numCls..<stride {
-                    coeff.append(preds[j*numDet + i])
+                guard bestScore >= Float(threshold) else { return }   // prunes most rows quickly
+
+                // ---- collect mask coefficients ----
+                var localCoeff = [Float](repeating: 0, count: numMasks)
+                var cidx = 4 + numCls               // first coeff column
+                for m in 0..<numMasks {
+                    localCoeff[m] = col(cidx)
+                    cidx &+= 1
                 }
-                
-                // class confs
-                guard let (maxConf,classID) = confidences.enumerated()
-                          .map({ ($0.element,$0.offset) })
-                          .max(by: {$0.0 < $1.0}),
-                      maxConf >= Float(self.threshold) else { continue }
-                
-                
-                // xywh → xyxy
-                let cx = coords[0], cy = coords[1]
-                let w  = coords[2], h = coords[3]
-                let x1 = cx - w/2, y1 = cy - h/2
-                let x2 = cx + w/2, y2 = cy + h/2
-                
-                var row = [x1,y1,x2,y2, maxConf]
-                row.append(Float(classID))
-                coeffs.append(coeff)
-                detRows.append(row)
+
+                // ---- xywh → xyxy  ----
+                let halfW = w * 0.5, halfH = h * 0.5
+                let bbox  = simd_float4(cx - halfW,    // x1
+                                        cy - halfH,    // y1
+                                        cx + halfW,    // x2
+                                        cy + halfH)    // y2
+
+                // ---- append to outputs (thread-safe) ----
+                outLock.lock()
+                detRows.append([bbox.x, bbox.y, bbox.z, bbox.w, bestScore, Float(bestCls)])
+                coeffs .append(localCoeff)
+                outLock.unlock()
             }
+
             
+            // print("Model output format processing took: \(Date().timeIntervalSince(t2a)) seconds")
+            let t2 = Date()
             
-            let kept = nonMaxSuppressionFast(detRows, iouThresh: Float(self.overlap))
+            var kept: [[Float]] = []
+            if #available(iOS 18.0, *) {
+                kept = MaskUtils.nonMaxSuppressionFast(detRows, iouThresh: Float(self.overlap))
+            } else {
+                // Fallback on earlier versions
+                kept = [] as [[Float]]
+            }
             var final: [RFObjectDetectionPrediction] = []
             
             var boxesKeep = [CGRect]()
@@ -152,38 +219,67 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                 keeps.append(keep)
                 
             }
+            
+            // print("NMS took: \(Date().timeIntervalSince(t2)) seconds")
+            let t3 = Date()
             if #available(iOS 18.0, *) {
                 let maskBins = MaskUtils.processMaskAccurate(proto: proto,
                                                              protoShape: protoShape,
                                                              coeffs: coeffsKeep,
                                                              dets: boxesKeep,
-                                                             imgH: Int(image.size.height), imgW: Int(image.size.width))
+                                                             imgH: Int(image.size.height), imgW: Int(image.size.width),
+                                                             procH: Int(outputSize.height), procW: Int(outputSize.width))
+                print("time to process masks: \(Date().timeIntervalSince(t3)) seconds")
+                let t4 = Date()
+                
                 
                 for (i, maskBin) in maskBins.enumerated() {
-                    let h = maskBin.count                 // rows
-                    let w = maskBin.first!.count          // cols
-                    let flatMask: [UInt8] = maskBin.flatMap { $0 }
+                    let flatMask: [UInt8] = maskBin     // cols
+                    let box = boxesKeep[i]
+                    let timeToPolygon = Date()
                     
-                    let polys = try? MaskUtils.maskToPolygons(mask: flatMask, width: w, height: h)
+                    let x1  = Float(box.minX)
+                    let y1  = Float(box.minY)
+                    let x2  = Float(box.maxX)
+                    let y2  = Float(box.maxY)
+
+                    // Integer bounds in tensor space
+                    let colStart = max(0, Int(floor(x1)))
+                    let colEnd   = min(Int(imgWidth), Int(ceil(x2))) as Int
+                    let rowStart = max(0, Int(floor(y1)))
+                    let rowEnd   = min(Int(imgHeight), Int(ceil(y2)))
+
+                    let roiW = colEnd - colStart          // = x2 − x1
+                    let roiH = rowEnd - rowStart          // = y2 − y1
+                    print("Width * Height: \(roiW * roiH); num pixels: \(flatMask.count)")
+                    var polys = [[CGPoint]]()
+                    do {
+                        polys = try MaskUtils.maskToPolygons(m: flatMask, width: roiW, h: roiH)
+                    } catch {
+                        print(error)
+                    }
+//                    let polys = SIMDContour.polygons(width: Int(box.width), height: Int(box.height), mask: flatMask)
+                    // print("time to polygon: \(Date().timeIntervalSince(timeToPolygon)) seconds")
                     
-                    var polygon = [CGPoint]()
-                    if let polygons = polys {
-                        if polygons.count > 0 {
-                            polygon = polygons[0]
-                            if (polygon.count > 0) {
-                                polygon.append(polygon.first!)
-                            }
-                        }
+                    var polygon = (polys.count ?? 0 > 0 ? polys[0] : []) ?? []
+                    
+                    if polygon.count == 0 {
+                        print("no polygons returned")
+                        print("polys: \(polys ?? [[]])")
                     }
                     
+                    polygon = polygon.map { CGPoint(x: CGFloat($0.x + box.minX), y: CGFloat($0.y + box.minY)) }
+                    
                     let keep = keeps[i]
-                    let box = boxesKeep[i]
                     
                     let classname = classes[Int(keep[5])]
-                    let detection = RFInstanceSegmentationPrediction(x: Float(box.midX), y: Float(box.midY), width: Float(box.width), height: Float(box.height), className: classname, confidence: keep[4], color: hexStringToUIColor(hex: colors[classname] ?? "#ff0000"), box: box, points:polygon, mask: maskBin)
+                    let detection = RFInstanceSegmentationPrediction(x: Float(box.midX), y: Float(box.midY), width: Float(box.width), height: Float(box.height), className: classname, confidence: keep[4], color: hexStringToUIColor(hex: colors[classname] ?? "#ff0000"), box: box, points:polygon, mask: nil)
                     final.append(detection)
                 }
+                print("Formulating Predictions Took: \(Date().timeIntervalSince(t4)) seconds")
             }
+            
+            print("complete Mask Processing Took: \(Date().timeIntervalSince(t3)) seconds")
             
             completion(final, nil)
         } catch let error {
@@ -237,7 +333,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
             let rows = coeffs.count
             if (rows == 0) { return nil }
             let cols = coeffs.first!.count     // assume rectangular
-
+            
             let flat = coeffs.flatMap { $0 }   // [Float] length = rows*cols
             
             let mlArray = try? MLMultiArray(
@@ -245,24 +341,33 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                 dataType: .float32)
             
             mlArray?.dataPointer.withMemoryRebound(to: Float.self,
-                                                  capacity: flat.count) { ptr in
+                                                   capacity: flat.count) { ptr in
                 flat.withUnsafeBufferPointer { src in
                     ptr.update(from: src.baseAddress!, count: flat.count)
                 }
             }
-        
-            let shapedCoeffs = MLShapedArray<Float>(mlArray!)
-            let coeffs_t = MLTensor(shapedCoeffs)
-            masks = coeffs_t.matmul(masks)
-            masks = ((masks * -1)
-                .exp() + 1)
-                .reciprocal() // sigmoid
             
-            masks = masks.reshaped(to: [rows, mh, mw])
+            let shapedCoeffs = MLShapedArray<Float>(mlArray!)
+            
+            masks = withMLTensorComputePolicy(anePreferred) {
 
+                let coeffs_t = MLTensor(shapedCoeffs)
+                var proc_masks = coeffs_t.matmul(masks)
+                proc_masks = ((proc_masks * -1)
+                    .exp() + 1)
+                .reciprocal() // sigmoid
+                
+                proc_masks = proc_masks.reshaped(to: [rows, mh, mw])
+                
+                proc_masks = proc_masks.resized(to: (outH, outW), method: .bilinear(alignCorners: false))
+                return proc_masks
+            }
+            
+            
+            
             return masks
         }
-
+        
         
         static func cropMask(_ mask: inout [Float],
                              det: CGRect,
@@ -285,152 +390,212 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
         
         /// Full **accurate** path → returns binary mask resized to image
         static func processMaskAccurate(proto: MLMultiArray, protoShape: (Int,Int,Int),
-                                        coeffs: [[Float]],
-                                        dets: [CGRect],
-                                        imgH: Int,
-                                        imgW: Int) -> [[[UInt8]]] {
-            guard let rawMasks = preprocessSegmentationMasks(proto: proto,
-                                                       protoShape: protoShape,
-                                                       coeffs: coeffs,
-                                                             outH: imgH, outW: imgW) else {
-                return []
-            }
-            let masks = rawMasks.resized(to: (imgH, imgW), method: .bilinear(alignCorners: false))
+                                                coeffs: [[Float]],
+                                                dets: [CGRect],
+                                                imgH: Int,
+                                        imgW: Int, procH: Int, procW: Int) -> [[UInt8]] {
+            let t0 = Date()
+                    guard let masks = preprocessSegmentationMasks(proto: proto,
+                                                               protoShape: protoShape,
+                                                               coeffs: coeffs,
+                                                                     outH: imgH, outW: imgW) else {
+                        return []
+                    }
             
-            let (h, w) = (masks.shape[1], masks.shape[2])
-            let nDet = dets.count
+                    
+                    let (h, w) = (masks.shape[1], masks.shape[2])
+                    let nDet = dets.count
 
-            let rowVector = (0..<w).map { Float($0) }
-            let colVector = (0..<h).map { Float($0) }
+                    let rowVector = (0..<w).map { Float($0) }
+                    let colVector = (0..<h).map { Float($0) }
 
-            let r = MLTensor(MLShapedArray<Float>(scalars: rowVector, shape: [w]))
-                        .reshaped(to: [1, 1, w])
+//                    let r = MLTensor(MLShapedArray<Float>(scalars: rowVector, shape: [w]))
+//                                .reshaped(to: [1, 1, w])
+//
+//                    let c = MLTensor(MLShapedArray<Float>(scalars: colVector, shape: [h]))
+//                                .reshaped(to: [1, h, 1])
 
-            let c = MLTensor(MLShapedArray<Float>(scalars: colVector, shape: [h]))
-                        .reshaped(to: [1, h, 1])
-            var result = [[[UInt8]]]()
-            for i in 0..<(nDet) {
-                // get detection
+            print("time to do math: \(Date().timeIntervalSince(t0))")
+            let t1 = Date()
+            // Pre-allocate the result container so every worker writes
+            // to a unique slot — no locking or .append() races.
+            var result       = []as [[UInt8]]
+            let resultLock   = NSLock()          // only for stderr / print, not result.
+
+            // ---------------------------------------------------------------------------
+            //  Parallel pass — one iteration per detection
+            // ---------------------------------------------------------------------------
+            for i in 0..<nDet {
+                // 1. Grab detection-specific data --------------------------------------
                 let det = dets[i]
-                let x1 = Float(det.minX)
-                let y1 = Float(det.minY)
-                let x2 = Float(det.maxX)
-                let y2 = Float(det.maxY)
-                
-                print("x1 \(x1), y1 \(y1), x2 \(x2), y2 \(y2)")
-                
-                
-                let rotatedMask = masks[i]
-                
-                let kx = (r .> (x1))
-                
-                // c .> Float(h)/2.0 -> left half visible
-                // r .> Float(w)/2.0 -> bottom half
-                let keep = c .< y2 .& c .> y1 .& r .< x2 .& r .> x1
-//                (r .< x2) .&    // & r < x2
-//                (c .> (Float(h)-y2)) .&
-//                (c .< (Float(h)-y1 ))   // final shape [nDet,h,w]
-                
-                let cropped = rotatedMask * keep
-                
-                let shaped: MLShapedArray<Float> = try! shapedArraySync(cropped, as: Float.self)
-                
+                let x1  = Float(det.minX)
+                let y1  = Float(det.minY)
+                let x2  = Float(det.maxX)
+                let y2  = Float(det.maxY)
+
+                // 2. Mask maths ---------------------------------------------------------
+                let thr:   Float = 0.5            // decision boundary
+                // Integer bounds in tensor space
+                let colStart = max(0, Int(floor(x1)))
+                let colEnd   = min(w, Int(ceil(x2)))
+                let rowStart = max(0, Int(floor(y1)))
+                let rowEnd   = min(h, Int(ceil(y2)))
+
+                let roiW = colEnd - colStart          // = x2 − x1
+                let roiH = rowEnd - rowStart          // = y2 − y1
 
                 
-                var out: [[UInt8]] =
-                                                 Array(repeating:
-                                                       Array(repeating: 0, count: w),
-                                                       count: h)
-                let scalars = shaped.scalars                      // flat Float buffer
-                    var offset  = 0
-                for y in 0..<h {
-                    for x in 0..<w {
-                                let p = scalars[offset]
-                                out[y][x] = p < 0.5 ? 0 : 255
-                                offset += 1
-                            }
-                        }
-                result.append(out)
+                let cropped = withMLTensorComputePolicy(anePreferred) {
+                    let rotatedMask = masks[i]                    // MLTensor  [h,w]
+//                    let keep  =  c .< y2 .& c .> y1 .& r .< x2 .& r .> x1
+                    
+                    // Build index tensors once per detection -------------------------------
+                    let rowIdxTensor: MLTensor = {
+                        let rows = (rowStart ..< rowEnd).map { Int32($0) }
+                        return MLTensor(MLShapedArray<Int32>(scalars: rows, shape: [roiH]))
+                    }()
+
+                    let colIdxTensor: MLTensor = {
+                        let cols = (colStart ..< colEnd).map { Int32($0) }
+                        print(cols)
+                        return MLTensor(MLShapedArray<Int32>(scalars: cols, shape: [roiW]))
+                    }()
+                    
+                    let rows   = rotatedMask.gathering(atIndices: rowIdxTensor, alongAxis: 0)   // (1)
+                        let roi    = rows.gathering(atIndices: colIdxTensor, alongAxis: 1)          // (2)
+                        return (roi .> thr) * Float(255)                             // 0 / 255  (Float)
+//                        .cast(to: UInt8.self)                  // change dtype so we fetch UInt8s
+                }
+
+                // 3. Convert to scalars (still blocking; dominates runtime) ------------
+                let shapedSyncTime = Date()
+                let shaped: MLShapedArray<Float> = try! shapedArraySync(cropped,
+                                                                        as: Float.self)
                 
+//                let scalars = shaped.scalars                  // flat [Float]
+                print("time to sync shape: \(Date().timeIntervalSince(shapedSyncTime))")
+                let beforeUint8Time = Date()
+
+                let elemCount = roiW * roiH                 // final buffer size
+                print("elements: \(elemCount) \(shaped.scalars.count)")
+                
+                let sum = shaped.scalars.map { Int($0) }.reduce(0, +)
+                print("sum tensor: \(sum)")
+
+                // ──────────────────────────────────────────────────────────────
+                // 7.  SIMD cast  Float → UInt8  **only inside the ROI**
+                // ──────────────────────────────────────────────────────────────
+                var uint8Flat = [UInt8](repeating: 0, count: elemCount)
+
+                shaped.scalars.withUnsafeBufferPointer { src in
+                    uint8Flat.withUnsafeMutableBufferPointer { dst in
+                        vDSP_vfixu8(src.baseAddress!, 1,
+                                    dst.baseAddress!, 1,
+                                    vDSP_Length(elemCount))
+                    }
+                }
+
+                
+                 print("time to convert to uint8: \(Date().timeIntervalSince(beforeUint8Time))")
+
+                // 5. Store into the pre-allocated slot ----------------------------------
+                result.append(uint8Flat as [UInt8])
             }
-            return result
+            print("time to convert to usable format: \(Date().timeIntervalSince(t1))")
+                    return result
+                }
+        
+        // MARK: – Greedy NMS (non_max_suppression_fast) ------------------------------
+        
+        static func nonMaxSuppressionFast(_ dets: [[Float]], iouThresh: Float) -> [[Float]] {
+            guard !dets.isEmpty else { return [] }
+            var boxes = dets
+            // sort by confidence
+            boxes.sort { $0[4] > $1[4] }
+            var keep = [[Float]]()
+            
+            while !boxes.isEmpty {
+                let a = boxes.removeFirst()
+                keep.append(a)
+                boxes = boxes.filter { b in
+                    let iou = iouRectIoU(a,b)
+                    return iou <= iouThresh
+                }
+            }
+            return keep
+        }
+        
+        static func iouRectIoU(_ a:[Float], _ b:[Float]) -> Float {
+            let xA = max(a[0], b[0]), yA = max(a[1], b[1])
+            let xB = min(a[2], b[2]), yB = min(a[3], b[3])
+            let interW = max(0, xB - xA), interH = max(0, yB - yA)
+            let inter = interW * interH
+            let areaA = (a[2]-a[0]) * (a[3]-a[1])
+            let areaB = (b[2]-b[0]) * (b[3]-b[1])
+            return inter / (areaA + areaB - inter)
         }
         
         static func maskToPolygons(
-            mask: [UInt8],
+            m: [UInt8],
             width: Int,
-            height: Int) throws -> [[CGPoint]] {
-
-            // 1️⃣ Binary data ➜ one‑channel CGImage ------------------------------
-            let cfData   = CFDataCreate(nil, mask, mask.count)!
-            let provider = CGDataProvider(data: cfData)!
-            let cgMask   = CGImage(width:  width,
-                                   height: height,
-                                   bitsPerComponent: 8,
-                                   bitsPerPixel: 8,
-                                   bytesPerRow: width,
-                                   space: CGColorSpaceCreateDeviceGray(),
-                                   bitmapInfo: [],                   // no alpha
-                                   provider: provider,
-                                   decode: nil,
-                                   shouldInterpolate: false,
-                                   intent: .defaultIntent)!
-
-            // 2️⃣ Vision contour detection ---------------------------------------
-            let request = VNDetectContoursRequest()
-            request.detectsDarkOnLight   = false   // mask = white foreground
-            request.contrastAdjustment   = 1.0     // no stretching needed
-            request.maximumImageDimension = max(width, height)  // keep full res
-
-            try VNImageRequestHandler(cgImage: cgMask, options: [:])
-                .perform([request])
-
-            guard let obs = request.results?.first as? VNContoursObservation else {
-                return []
-            }
-
-            // 3️⃣ Copy contours + denormalise y‑axis (Vision y: 0=bottom, UIKit 0=top)
-            var polygons = [[CGPoint]]()
-            for i in 0..<obs.topLevelContourCount {
-                let contour = obs.topLevelContours[i]
-                let ring = contour.normalizedPoints.map { p in
-                    CGPoint(x: CGFloat(p.x) * CGFloat(width),
-                            y: (1 - CGFloat(p.y)) * CGFloat(height))
+            h: Int) throws -> [[CGPoint]] {
+                var mask = m
+                var height = h
+                // 1️⃣ Binary data ➜ one‑channel CGImage ------------------------------
+                if width * height != mask.count {
+                    print("NOT CORRECT BOUNDS")
+                    return []
                 }
-                polygons.append(ring)
+                if height < 64 && width < 64 {
+                    // need to pad
+                    let pad: [UInt8] = Array(repeating: 0, count: width)
+                    for _ in 0..<64-height {
+                        mask.append(contentsOf: pad)
+                    }
+                    height = 64
+                }
+                let cfData   = CFDataCreate(nil, mask, mask.count)!
+                let provider = CGDataProvider(data: cfData)!
+                let cgMask   = CGImage(width:  width,
+                                       height: height,
+                                       bitsPerComponent: 8,
+                                       bitsPerPixel: 8,
+                                       bytesPerRow: width,
+                                       space: CGColorSpaceCreateDeviceGray(),
+                                       bitmapInfo: [],                   // no alpha
+                                       provider: provider,
+                                       decode: nil,
+                                       shouldInterpolate: false,
+                                       intent: .defaultIntent)!
+                
+                print("mask image size for poly: \(width)x\(height) \(cgMask.width)x\(cgMask.height)")
+                
+                // 2️⃣ Vision contour detection ---------------------------------------
+                let request = VNDetectContoursRequest()
+                request.detectsDarkOnLight   = false   // mask = white foreground
+                request.contrastAdjustment   = 1.0     // no stretching needed
+                request.maximumImageDimension = max(width, height)  // keep full res
+                
+                try VNImageRequestHandler(cgImage: cgMask, options: [:])
+                    .perform([request])
+                
+                guard let obs = request.results?.first as? VNContoursObservation else {
+                    print("no polygons found")
+                    return []
+                }
+                // 3️⃣ Copy contours + denormalise y‑axis (Vision y: 0=bottom, UIKit 0=top)
+                var polygons = [[CGPoint]]()
+                print("\(obs.topLevelContourCount) polygons found")
+                for i in 0..<obs.topLevelContourCount {
+                    let contour = obs.topLevelContours[i]
+                    let ring = contour.normalizedPoints.map { p in
+                        CGPoint(x: CGFloat(p.x) * CGFloat(width),
+                                y: (1 - CGFloat(p.y)) * CGFloat(height))
+                    }
+                    polygons.append(ring)
+                }
+                return polygons
             }
-            return polygons
-        }
-    }
-
-    // MARK: – Greedy NMS (non_max_suppression_fast) ------------------------------
-
-    func nonMaxSuppressionFast(_ dets: [[Float]], iouThresh: Float) -> [[Float]] {
-        guard !dets.isEmpty else { return [] }
-        var boxes = dets
-        // sort by confidence
-        boxes.sort { $0[4] > $1[4] }
-        var keep = [[Float]]()
-        
-        while !boxes.isEmpty {
-            let a = boxes.removeFirst()
-            keep.append(a)
-            boxes = boxes.filter { b in
-                let iou = iouRectIoU(a,b)
-                return iou <= iouThresh
-            }
-        }
-        return keep
-    }
-
-    func iouRectIoU(_ a:[Float], _ b:[Float]) -> Float {
-        let xA = max(a[0], b[0]), yA = max(a[1], b[1])
-        let xB = min(a[2], b[2]), yB = min(a[3], b[3])
-        let interW = max(0, xB - xA), interH = max(0, yB - yA)
-        let inter = interW * interH
-        let areaA = (a[2]-a[0]) * (a[3]-a[1])
-        let areaB = (b[2]-b[0]) * (b[3]-b[1])
-        return inter / (areaA + areaB - inter)
     }
 }
 
