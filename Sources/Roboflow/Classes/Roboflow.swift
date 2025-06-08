@@ -31,7 +31,6 @@ public class RoboflowMobile: NSObject {
     
     func getModelClass(modelType: String) -> RFModel {
         if (modelType.contains("seg")) {
-            print("initializing rf segmentation model")
             return RFInstanceSegmentationModel()
         }
         return RFObjectDetectionModel()
