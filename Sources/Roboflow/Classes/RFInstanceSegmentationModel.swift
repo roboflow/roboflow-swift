@@ -11,16 +11,19 @@ import Vision
 import UIKit
 import Accelerate
 
-enum MaskProcessingMode {
-    case quality
-    case balanced
-    case performance
-}
+
 
 //Creates an instance of an ML model that's hosted on Roboflow
 public class RFInstanceSegmentationModel: RFObjectDetectionModel {
     var classes = [String]()
-    var maskProcessingMode: MaskProcessingMode = .balanced
+    var maskProcessingMode: ProcessingMode = .balanced
+    
+    public override func configure(threshold: Double, overlap: Double, maxObjects: Float, processingMode: ProcessingMode = .balanced) {
+        super.configure(threshold: threshold, overlap: overlap, maxObjects: maxObjects, processingMode: processingMode)
+        maskProcessingMode = processingMode
+    }
+    
+    
     //Load the retrieved CoreML model into an already created RFObjectDetectionModel instance
     override func loadMLModel(modelPath: URL, colors: [String: String], classes: [String]) -> Error? {
         self.colors = colors
@@ -50,7 +53,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
         let imgHeight = CGFloat(image.size.height)
         let imgWidth = CGFloat(image.size.width)
         
-        let outputSize = self.maskProcessingMode == .balanced ? CGSize(width: 640, height: 640) : CGSize(width: imgWidth, height: imgHeight)
+        let outputSize = self.maskProcessingMode == .performance ? CGSize(width: imgWidth / 2, height: imgHeight / 2) : self.maskProcessingMode == .balanced ? CGSize(width: 640, height: 640) : CGSize(width: imgWidth, height: imgHeight)
         guard let coreMLRequest = self.coreMLRequest else {
             completion(nil, "Model initialization failed.")
             return
@@ -60,23 +63,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
             return
         }
         
-        // resize image to input dimmensions
-        let resizeFilter = CIFilter(name:"CILanczosScaleTransform")!
-
-        // Desired output size
-        let targetSize = CGSize(width: 640, height: 640)
-
-        // Compute scale and corrective aspect ratio
-        let scale = targetSize.height / (ciImage.extent.height)
-        let aspectRatio = targetSize.width/((ciImage.extent.width) * scale)
-
-        // Apply resizing
-        resizeFilter.setValue(ciImage, forKey: kCIInputImageKey)
-        resizeFilter.setValue(scale, forKey: kCIInputScaleKey)
-        resizeFilter.setValue(aspectRatio, forKey: kCIInputAspectRatioKey)
-        let outputImage = resizeFilter.outputImage
-        
-        let handler = VNImageRequestHandler(ciImage: outputImage!, options: [:])
+        let handler = VNImageRequestHandler(ciImage: ciImage, options: [:])
 
         do {
             try handler.perform([coreMLRequest])
@@ -87,7 +74,6 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
             
             let pred = predictions.featureValue.multiArrayValue!
             let proto = protos.featureValue.multiArrayValue!
-            
             
             let numMasks = 32
             let numCls = self.colors.count
@@ -119,7 +105,9 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
 
             // lock for the result buffers (used only when we keep a detection)
             let outLock = NSLock()
-
+            
+            let xs = outputSize.width / 640
+            let ys = outputSize.height / 640
             // MARK: -- parallel pass over detections
             DispatchQueue.concurrentPerform(iterations: numDet) { i in
                 // ---- read bbox (cx,cy,w,h)  ----
@@ -157,7 +145,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
 
                 // ---- append to outputs (thread-safe) ----
                 outLock.lock()
-                detRows.append([bbox.x, bbox.y, bbox.z, bbox.w, bestScore, Float(bestCls)])
+                detRows.append([bbox.x * Float(xs), bbox.y * Float(ys), bbox.z * Float(xs), bbox.w * Float(ys), bestScore, Float(bestCls)])
                 coeffs .append(localCoeff)
                 outLock.unlock()
             }
@@ -183,9 +171,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                 let height = (keep[3] - keep[1])
                 let minX = CGFloat(keep[0])
                 let minY = CGFloat(keep[1])
-                let xs = imgWidth / 640
-                let ys = imgHeight / 640
-                let box = CGRect(x: CGFloat(minX*xs), y: CGFloat(minY*ys), width: CGFloat(width)*xs, height: CGFloat(height)*ys)
+                let box = CGRect(x: CGFloat(minX), y: CGFloat(minY), width: CGFloat(width), height: CGFloat(height))
                 
                 boxesKeep.append(box)
                 coeffsKeep.append(coeffs[idx])
@@ -198,13 +184,13 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                                                              protoShape: protoShape,
                                                              coeffs: coeffsKeep,
                                                              dets: boxesKeep,
-                                                             imgH: Int(image.size.height), imgW: Int(image.size.width),
                                                              procH: Int(outputSize.height), procW: Int(outputSize.width))
                 
+                let scaleX = Float(imgWidth / outputSize.width)
+                let scaleY = Float(imgHeight / outputSize.height)
                 for (i, maskBin) in maskBins.enumerated() {
                     let flatMask: [UInt8] = maskBin     // cols
                     let box = boxesKeep[i]
-                    let timeToPolygon = Date()
                     
                     let x1  = Float(box.minX)
                     let y1  = Float(box.minY)
@@ -228,13 +214,12 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                     
                     var polygon = (polys.count > 0 ? polys[0] : [])
                     
-                    
-                    polygon = polygon.map { CGPoint(x: CGFloat($0.x + box.minX), y: CGFloat($0.y + box.minY)) }
+                    polygon = polygon.map { CGPoint(x: CGFloat($0.x + box.minX) * CGFloat(scaleX), y: CGFloat($0.y + box.minY) * CGFloat(scaleY)) }
                     
                     let keep = keeps[i]
                     
                     let classname = classes[Int(keep[5])]
-                    let detection = RFInstanceSegmentationPrediction(x: Float(box.midX), y: Float(box.midY), width: Float(box.width), height: Float(box.height), className: classname, confidence: keep[4], color: hexStringToUIColor(hex: colors[classname] ?? "#ff0000"), box: box, points:polygon, mask: nil)
+                    let detection = RFInstanceSegmentationPrediction(x: Float(box.midX) * scaleX, y: Float(box.midY) * scaleY, width: Float(box.width) * scaleX, height: Float(box.height) * scaleY, className: classname, confidence: keep[4], color: hexStringToUIColor(hex: colors[classname] ?? "#ff0000"), box: box, points:polygon, mask: nil)
                     final.append(detection)
                 }
             }

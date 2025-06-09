@@ -25,7 +25,7 @@ struct MaskUtils {
         proto: MLMultiArray,
         protoShape: (c: Int, h: Int, w: Int),
         coeffs: [[Float]],                      // flat [nDet*c]
-        outH: Int, outW: Int
+        procH: Int, procW: Int // processing height and width
     ) -> MLTensor? {
         let (c, mh, mw) = protoShape
         let shapedProto = MLShapedArray<Float>(proto)
@@ -61,7 +61,7 @@ struct MaskUtils {
             
             proc_masks = proc_masks.reshaped(to: [rows, mh, mw])
             
-            proc_masks = proc_masks.resized(to: (outH, outW), method: .bilinear(alignCorners: false))
+            proc_masks = proc_masks.resized(to: (procH, procW), method: .bilinear(alignCorners: false))
             return proc_masks
         }
         
@@ -73,14 +73,12 @@ struct MaskUtils {
     /// Full **accurate** path → returns binary mask resized to image
     static func processMaskAccurate(proto: MLMultiArray, protoShape: (Int,Int,Int),
                                     coeffs: [[Float]],
-                                    dets: [CGRect],
-                                    imgH: Int,
-                                    imgW: Int, procH: Int, procW: Int) -> [[UInt8]] {
+                                    dets: [CGRect],procH: Int, procW: Int) -> [[UInt8]] {
         // project protos and coefficients to masks
         guard let masks = preprocessSegmentationMasks(proto: proto,
                                                       protoShape: protoShape,
                                                       coeffs: coeffs,
-                                                      outH: imgH, outW: imgW) else {
+                                                      procH: procH, procW: procW) else {
             return []
         }
         
@@ -133,7 +131,6 @@ struct MaskUtils {
             }
             
             // 3. Convert to scalars (still blocking; dominates runtime) ------------
-            let shapedSyncTime = Date()
             let shaped: MLShapedArray<Float> = try! shapedArraySync(cropped,
                                                                     as: Float.self)
             

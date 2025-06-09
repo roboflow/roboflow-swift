@@ -9,6 +9,13 @@ import Foundation
 import CoreML
 import Vision
 import UIKit
+
+public enum ProcessingMode {
+    case quality // use full image resolution
+    case balanced // use model resolution
+    case performance // use half model resolution
+}
+
 //Creates an instance of an ML model that's hosted on Roboflow
 public class RFModel: NSObject {
 
@@ -22,7 +29,7 @@ public class RFModel: NSObject {
     var coreMLRequest: VNCoreMLRequest!
     
     //Configure the parameters for the model
-    public func configure(threshold: Double, overlap: Double, maxObjects: Float) {}
+    public func configure(threshold: Double, overlap: Double, maxObjects: Float, processingMode: ProcessingMode = .balanced) {}
     
     //Load the retrieved CoreML model into an already created RFObjectDetectionModel instance
     func loadMLModel(modelPath: URL, colors: [String: String], classes: [String]) -> Error? {
