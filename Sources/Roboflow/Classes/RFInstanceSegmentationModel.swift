@@ -8,12 +8,12 @@
 import Foundation
 import CoreML
 import Vision
-import UIKit
 import Accelerate
 
 
 
 //Creates an instance of an ML model that's hosted on Roboflow
+@available(macOS 10.15, *)
 public class RFInstanceSegmentationModel: RFObjectDetectionModel {
     var classes = [String]()
     var maskProcessingMode: ProcessingMode = .balanced
@@ -30,7 +30,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
         self.classes = classes
         do {
             let config = MLModelConfiguration()
-            if #available(iOS 16.0, *) {
+            if #available(iOS 16.0, macOS 13.0, *) {
                 config.computeUnits = .cpuAndNeuralEngine
             } else {
                 // Fallback on earlier versions
@@ -48,22 +48,17 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
     }
     
     //Run image through model and return Detections
-    @available(*, renamed: "detect(image:)")
-    public override func detect(image:UIImage, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
-        let imgHeight = CGFloat(image.size.height)
-        let imgWidth = CGFloat(image.size.width)
+    public override func detect(pixelBuffer:CVPixelBuffer, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
+        let imgHeight = CGFloat(pixelBuffer.height())
+        let imgWidth = CGFloat(pixelBuffer.width())
         
         let outputSize = self.maskProcessingMode == .performance ? CGSize(width: imgWidth / 2, height: imgHeight / 2) : self.maskProcessingMode == .balanced ? CGSize(width: 640, height: 640) : CGSize(width: imgWidth, height: imgHeight)
         guard let coreMLRequest = self.coreMLRequest else {
             completion(nil, "Model initialization failed.")
             return
         }
-        guard let ciImage = CIImage(image: image) else {
-            completion(nil, "Image failed.")
-            return
-        }
         
-        let handler = VNImageRequestHandler(ciImage: ciImage, options: [:])
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
 
         do {
             try handler.perform([coreMLRequest])
@@ -151,7 +146,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
             }
             
             var kept: [[Float]] = []
-            if #available(iOS 18.0, *) {
+            if #available(iOS 18.0, macOS 15.0, *) {
                 kept = MaskUtils.nonMaxSuppressionFast(detRows, iouThresh: Float(self.overlap))
             } else {
                 // Fallback on earlier versions
@@ -179,7 +174,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                 
             }
             
-            if #available(iOS 18.0, *) {
+            if #available(iOS 18.0, macOS 15.0, *) {
                 let maskBins = MaskUtils.processMaskAccurate(proto: proto,
                                                              protoShape: protoShape,
                                                              coeffs: coeffsKeep,
@@ -219,36 +214,13 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                     let keep = keeps[i]
                     
                     let classname = classes[Int(keep[5])]
-                    let detection = RFInstanceSegmentationPrediction(x: Float(box.midX) * scaleX, y: Float(box.midY) * scaleY, width: Float(box.width) * scaleX, height: Float(box.height) * scaleY, className: classname, confidence: keep[4], color: hexStringToUIColor(hex: colors[classname] ?? "#ff0000"), box: box, points:polygon, mask: nil)
+                    let detection = RFInstanceSegmentationPrediction(x: Float(box.midX) * scaleX, y: Float(box.midY) * scaleY, width: Float(box.width) * scaleX, height: Float(box.height) * scaleY, className: classname, confidence: keep[4], color: hexStringToCGColor(hex: colors[classname] ?? "#ff0000"), box: box, points:polygon, mask: nil)
                     final.append(detection)
                 }
             }
             completion(final, nil)
         } catch let error {
             completion(nil, error)
-        }
-    }
-    
-    public override func detect(image: UIImage) async -> ([RFPrediction]?, Error?) {
-        return await withCheckedContinuation { continuation in
-            detect(image: image) { result, error in
-                continuation.resume(returning: (result, error))
-            }
-        }
-    }
-    
-    public override func detect(pixelBuffer: CVPixelBuffer, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
-        let image = UIImage(pixelBuffer: pixelBuffer)
-        detect(image: image!) { detections, error in
-            completion(detections, nil)
-        }
-    }
- 
-    public override func detect(pixelBuffer: CVPixelBuffer) async -> ([RFPrediction]?, Error?) {
-        return await withCheckedContinuation { continuation in
-            detect(pixelBuffer: pixelBuffer) { result, error in
-                continuation.resume(returning: (result, error))
-            }
         }
     }
 }

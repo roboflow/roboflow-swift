@@ -5,7 +5,9 @@
 //  Created by Nicholas Arner on 7/11/22.
 //
 
+#if canImport(UIKit)
 import UIKit
+
 import VideoToolbox
 
 extension UIImage {
@@ -21,3 +23,4 @@ extension UIImage {
             self.init(cgImage: cgImage)
     }
 }
+#endif

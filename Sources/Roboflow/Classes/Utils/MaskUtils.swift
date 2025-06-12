@@ -10,14 +10,14 @@ import Accelerate
 import Vision
 
 // MARK: – Mask utilities  (ports of preprocess_segmentation_masks & friends) --
-@available(iOS 18.0, *)
+@available(iOS 18.0, macOS 15.0, *)
 let gpuOnly      = MLComputePolicy(.cpuAndGPU)              // force GPU
-@available(iOS 18.0, *)
+@available(iOS 18.0, macOS 15.0, *)
 let anePreferred = MLComputePolicy(.cpuAndNeuralEngine)   // CPU-fallback, prefer ANE
-@available(iOS 18.0, *)
+@available(iOS 18.0, macOS 15.0, *)
 let anyFast      = MLComputePolicy(.all)                  // let Core ML choose
 
-@available(iOS 18.0, *)
+@available(iOS 18.0, macOS 15.0, *)
 struct MaskUtils {
     
     /// Uses tensor math to project coefficients and protos into masks.
@@ -249,7 +249,7 @@ struct MaskUtils {
 }
 
 /// materialize a MLTensor to a MLShapedArray for further processing
-@available(iOS 18.0, *)
+@available(iOS 18.0, macOS 15.0, *)
 func shapedArraySync<T: MLTensorScalar>(
     _ tensor: MLTensor,
     as _: T.Type = T.self) throws -> MLShapedArray<T> {
