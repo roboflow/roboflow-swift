@@ -8,8 +8,8 @@
 import Foundation
 import CoreML
 import Vision
-import UIKit
 //Creates an instance of an ML model that's hosted on Roboflow
+@available(macOS 10.15, *)
 public class RFObjectDetectionModel: RFModel {
 
     public override init() {
@@ -25,7 +25,7 @@ public class RFObjectDetectionModel: RFModel {
     var thresholdProvider = ThresholdProvider()
     
     //Configure the parameters for the model
-    public override func configure(threshold: Double, overlap: Double, maxObjects: Float, processingMode: ProcessingMode = .balanced) {
+    public override func configure(threshold: Double, overlap: Double, maxObjects: Float, processingMode: ProcessingMode = .balanced, maxNumberPoints: Int = 500) {
         self.threshold = threshold
         self.overlap = overlap
         self.maxObjects = maxObjects
@@ -55,16 +55,12 @@ public class RFObjectDetectionModel: RFModel {
     
     //Run image through model and return Detections
     @available(*, renamed: "detect(image:)")
-    public override func detect(image:UIImage, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
+    public override func detect(pixelBuffer buffer: CVPixelBuffer, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
         guard let coreMLRequest = self.coreMLRequest else {
             completion(nil, "Model initialization failed.")
             return
         }
-        guard let ciImage = CIImage(image: image) else {
-            completion(nil, "Image failed.")
-            return
-        }
-        let handler = VNImageRequestHandler(ciImage: ciImage, options: [:])
+        let handler = VNImageRequestHandler(cvPixelBuffer: buffer)
 
         do {
             try handler.perform([coreMLRequest])
@@ -75,13 +71,13 @@ public class RFObjectDetectionModel: RFModel {
             for detectResult in detectResults {
                 let flippedBox = CGRect(x: detectResult.boundingBox.minX, y: 1 - detectResult.boundingBox.maxY, width: detectResult.boundingBox.width, height: detectResult.boundingBox.height)
                 
-                let box = VNImageRectForNormalizedRect(flippedBox, Int(image.size.width), Int(image.size.height))
+                let box = VNImageRectForNormalizedRect(flippedBox, Int(buffer.width()), Int(buffer.height()))
                 let confidence = detectResult.confidence
                 var label:String = ""
                 if let recognizedResult = detectResult as? VNRecognizedObjectObservation, let classLabel = recognizedResult.labels.first?.identifier {
                     label = classLabel
                 }
-                let detection = RFObjectDetectionPrediction(x: Float((box.maxX+box.minX)/2.0), y: Float((box.maxY+box.minY)/2.0), width: Float((box.maxX-box.minX)), height: Float((box.maxY-box.minY)), className: label, confidence: confidence, color: hexStringToUIColor(hex: colors[label] ?? "#ff0000"), box: box)
+                let detection = RFObjectDetectionPrediction(x: Float((box.maxX+box.minX)/2.0), y: Float((box.maxY+box.minY)/2.0), width: Float((box.maxX-box.minX)), height: Float((box.maxY-box.minY)), className: label, confidence: confidence, color: hexStringToCGColor(hex: colors[label] ?? "#ff0000"), box: box)
                 detections.append(detection)
             }
             completion(detections, nil)

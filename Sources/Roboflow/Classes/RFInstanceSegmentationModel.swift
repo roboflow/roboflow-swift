@@ -8,19 +8,21 @@
 import Foundation
 import CoreML
 import Vision
-import UIKit
 import Accelerate
 
 
 
 //Creates an instance of an ML model that's hosted on Roboflow
+@available(macOS 10.15, *)
 public class RFInstanceSegmentationModel: RFObjectDetectionModel {
     var classes = [String]()
     var maskProcessingMode: ProcessingMode = .balanced
+    var maskMaxNumberPoints: Int = 500
     
-    public override func configure(threshold: Double, overlap: Double, maxObjects: Float, processingMode: ProcessingMode = .balanced) {
+    public override func configure(threshold: Double, overlap: Double, maxObjects: Float, processingMode: ProcessingMode = .balanced, maxNumberPoints: Int = 500) {
         super.configure(threshold: threshold, overlap: overlap, maxObjects: maxObjects, processingMode: processingMode)
         maskProcessingMode = processingMode
+        maskMaxNumberPoints = maxNumberPoints
     }
     
     
@@ -30,7 +32,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
         self.classes = classes
         do {
             let config = MLModelConfiguration()
-            if #available(iOS 16.0, *) {
+            if #available(iOS 16.0, macOS 13.0, *) {
                 config.computeUnits = .cpuAndNeuralEngine
             } else {
                 // Fallback on earlier versions
@@ -48,22 +50,17 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
     }
     
     //Run image through model and return Detections
-    @available(*, renamed: "detect(image:)")
-    public override func detect(image:UIImage, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
-        let imgHeight = CGFloat(image.size.height)
-        let imgWidth = CGFloat(image.size.width)
+    public override func detect(pixelBuffer:CVPixelBuffer, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
+        let imgHeight = CGFloat(pixelBuffer.height())
+        let imgWidth = CGFloat(pixelBuffer.width())
         
         let outputSize = self.maskProcessingMode == .performance ? CGSize(width: imgWidth / 2, height: imgHeight / 2) : self.maskProcessingMode == .balanced ? CGSize(width: 640, height: 640) : CGSize(width: imgWidth, height: imgHeight)
         guard let coreMLRequest = self.coreMLRequest else {
             completion(nil, "Model initialization failed.")
             return
         }
-        guard let ciImage = CIImage(image: image) else {
-            completion(nil, "Image failed.")
-            return
-        }
         
-        let handler = VNImageRequestHandler(ciImage: ciImage, options: [:])
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
 
         do {
             try handler.perform([coreMLRequest])
@@ -151,7 +148,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
             }
             
             var kept: [[Float]] = []
-            if #available(iOS 18.0, *) {
+            if #available(iOS 18.0, macOS 15.0, *) {
                 kept = MaskUtils.nonMaxSuppressionFast(detRows, iouThresh: Float(self.overlap))
             } else {
                 // Fallback on earlier versions
@@ -179,7 +176,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                 
             }
             
-            if #available(iOS 18.0, *) {
+            if #available(iOS 18.0, macOS 15.0, *) {
                 let maskBins = MaskUtils.processMaskAccurate(proto: proto,
                                                              protoShape: protoShape,
                                                              coeffs: coeffsKeep,
@@ -214,41 +211,78 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                     
                     var polygon = (polys.count > 0 ? polys[0] : [])
                     
+                    // if more points than max number of points, then downsample to be exactly that number of points by
+                    while polygon.count > 2 * maskMaxNumberPoints {
+                        // down sample by averaging every other point with its neighbors
+                        var newPoly = [CGPoint]()
+                        let n = polygon.count
+                            
+                        // Take every second point (even indices) and replace it with the
+                        // average of itself and its two neighbours.  The wrap-around indices
+                        // keep the polygon closed.
+                        for i in Swift.stride(from: 0, to: n, by: 2) {
+                            let prev = polygon[(i - 1 + n) % n]
+                            let curr = polygon[i]
+                            let next = polygon[(i + 1) % n]
+                            
+                            let averaged = CGPoint(
+                                x: (prev.x + curr.x + next.x) / 3.0,
+                                y: (prev.y + curr.y + next.y) / 3.0
+                            )
+                            newPoly.append(averaged)
+                        }
+                        
+                        polygon = newPoly        // replace with the down-sampled ring
+                    }
+                    
+                    if polygon.count > maskMaxNumberPoints {
+                        // ── 1. Decide which vertices to drop ──────────────────────────
+                        let toDrop    = polygon.count - maskMaxNumberPoints
+                        let strideF   = Double(polygon.count) / Double(toDrop)   // ≈ spacing
+                        var dropIdx   = [Int]()
+                        
+                        var cursor = strideF / 2            // centre the first drop
+                        for _ in 0..<toDrop {
+                            dropIdx.append(Int(cursor.rounded()) % polygon.count)
+                            cursor += strideF
+                        }
+                        
+                        // Remove in **descending** order so index shifts don’t hurt us
+                        dropIdx.sort(by: >)
+                        
+                        // ── 2. Perform the removals & neighbour averaging ─────────────
+                        var poly = polygon                  // work on a copy
+                        for idx in dropIdx {
+                            let n        = poly.count
+                            let prevIdx  = (idx - 1 + n) % n
+                            let nextIdx  = (idx + 1) % n
+                            
+                            // average the 3 points
+                            let averaged = CGPoint(
+                                x: (poly[prevIdx].x + poly[idx].x + poly[nextIdx].x) / 3.0,
+                                y: (poly[prevIdx].y + poly[idx].y + poly[nextIdx].y) / 3.0
+                            )
+                            
+                            poly[prevIdx] = averaged        // write into the *prev* vertex
+                            poly.remove(at: idx)            // drop the current vertex
+                        }
+                        
+                        polygon = poly                      // done – now has maskMaxNumberPoints
+                        
+                    }
+                    
                     polygon = polygon.map { CGPoint(x: CGFloat($0.x + box.minX) * CGFloat(scaleX), y: CGFloat($0.y + box.minY) * CGFloat(scaleY)) }
                     
                     let keep = keeps[i]
                     
                     let classname = classes[Int(keep[5])]
-                    let detection = RFInstanceSegmentationPrediction(x: Float(box.midX) * scaleX, y: Float(box.midY) * scaleY, width: Float(box.width) * scaleX, height: Float(box.height) * scaleY, className: classname, confidence: keep[4], color: hexStringToUIColor(hex: colors[classname] ?? "#ff0000"), box: box, points:polygon, mask: nil)
+                    let detection = RFInstanceSegmentationPrediction(x: Float(box.midX) * scaleX, y: Float(box.midY) * scaleY, width: Float(box.width) * scaleX, height: Float(box.height) * scaleY, className: classname, confidence: keep[4], color: hexStringToCGColor(hex: colors[classname] ?? "#ff0000"), box: box, points:polygon, mask: nil)
                     final.append(detection)
                 }
             }
             completion(final, nil)
         } catch let error {
             completion(nil, error)
-        }
-    }
-    
-    public override func detect(image: UIImage) async -> ([RFPrediction]?, Error?) {
-        return await withCheckedContinuation { continuation in
-            detect(image: image) { result, error in
-                continuation.resume(returning: (result, error))
-            }
-        }
-    }
-    
-    public override func detect(pixelBuffer: CVPixelBuffer, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
-        let image = UIImage(pixelBuffer: pixelBuffer)
-        detect(image: image!) { detections, error in
-            completion(detections, nil)
-        }
-    }
- 
-    public override func detect(pixelBuffer: CVPixelBuffer) async -> ([RFPrediction]?, Error?) {
-        return await withCheckedContinuation { continuation in
-            detect(pixelBuffer: pixelBuffer) { result, error in
-                continuation.resume(returning: (result, error))
-            }
         }
     }
 }

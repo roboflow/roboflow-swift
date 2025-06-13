@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import UIKit
+import CoreGraphics
 
 public class RFObjectDetectionPrediction: RFPrediction {
     let x: Float
@@ -15,10 +15,10 @@ public class RFObjectDetectionPrediction: RFPrediction {
     let height: Float
     let className: String
     let confidence: Float
-    let color: UIColor
+    let color: CGColor
     let box: CGRect
     
-    public init(x: Float, y: Float, width: Float, height: Float, className: String, confidence: Float, color: UIColor, box: CGRect) {
+    public init(x: Float, y: Float, width: Float, height: Float, className: String, confidence: Float, color: CGColor, box: CGRect) {
         self.x = x
         self.y = y
         self.width = width
@@ -30,8 +30,7 @@ public class RFObjectDetectionPrediction: RFPrediction {
     }
     
     public override func getValues() -> [String: Any] {
-        let ciColor = CIColor(color: color)
-        let rgbColor = [Int(ciColor.red * 255), Int(ciColor.green * 255), Int(ciColor.blue * 255)]
+        let rgbColor = [Int((color.components?[0])! * 255), Int((color.components?[1])! * 255), Int((color.components?[2])! * 255)]
         let result = [
             "x": x,
             "y": y,
@@ -44,5 +43,4 @@ public class RFObjectDetectionPrediction: RFPrediction {
         
         return result
     }
-
 }

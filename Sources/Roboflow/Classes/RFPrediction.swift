@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import UIKit
 
 public class RFPrediction {
     public func getValues() -> [String: Any] {
