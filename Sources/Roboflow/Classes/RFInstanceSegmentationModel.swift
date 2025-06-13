@@ -211,64 +211,19 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                     
                     var polygon = (polys.count > 0 ? polys[0] : [])
                     
-                    // if more points than max number of points, then downsample to be exactly that number of points by
-                    while polygon.count > 2 * maskMaxNumberPoints {
-                        // down sample by averaging every other point with its neighbors
-                        var newPoly = [CGPoint]()
-                        let n = polygon.count
-                            
-                        // Take every second point (even indices) and replace it with the
-                        // average of itself and its two neighbours.  The wrap-around indices
-                        // keep the polygon closed.
-                        for i in Swift.stride(from: 0, to: n, by: 2) {
-                            let prev = polygon[(i - 1 + n) % n]
-                            let curr = polygon[i]
-                            let next = polygon[(i + 1) % n]
-                            
-                            let averaged = CGPoint(
-                                x: (prev.x + curr.x + next.x) / 3.0,
-                                y: (prev.y + curr.y + next.y) / 3.0
-                            )
-                            newPoly.append(averaged)
-                        }
-                        
-                        polygon = newPoly        // replace with the down-sampled ring
-                    }
-                    
                     if polygon.count > maskMaxNumberPoints {
                         // ── 1. Decide which vertices to drop ──────────────────────────
-                        let toDrop    = polygon.count - maskMaxNumberPoints
-                        let strideF   = Double(polygon.count) / Double(toDrop)   // ≈ spacing
-                        var dropIdx   = [Int]()
+                        let toKeep    = maskMaxNumberPoints
+                        let strideF   = Double(polygon.count) / Double(toKeep)   // ≈ spacing
+                        var keep = [CGPoint]()
                         
                         var cursor = strideF / 2            // centre the first drop
-                        for _ in 0..<toDrop {
-                            dropIdx.append(Int(cursor.rounded()) % polygon.count)
+                        for _ in 0..<toKeep {
+                            keep.append(polygon[Int(cursor.rounded()) % polygon.count])
                             cursor += strideF
                         }
                         
-                        // Remove in **descending** order so index shifts don’t hurt us
-                        dropIdx.sort(by: >)
-                        
-                        // ── 2. Perform the removals & neighbour averaging ─────────────
-                        var poly = polygon                  // work on a copy
-                        for idx in dropIdx {
-                            let n        = poly.count
-                            let prevIdx  = (idx - 1 + n) % n
-                            let nextIdx  = (idx + 1) % n
-                            
-                            // average the 3 points
-                            let averaged = CGPoint(
-                                x: (poly[prevIdx].x + poly[idx].x + poly[nextIdx].x) / 3.0,
-                                y: (poly[prevIdx].y + poly[idx].y + poly[nextIdx].y) / 3.0
-                            )
-                            
-                            poly[prevIdx] = averaged        // write into the *prev* vertex
-                            poly.remove(at: idx)            // drop the current vertex
-                        }
-                        
-                        polygon = poly                      // done – now has maskMaxNumberPoints
-                        
+                        polygon = keep
                     }
                     
                     polygon = polygon.map { CGPoint(x: CGFloat($0.x + box.minX) * CGFloat(scaleX), y: CGFloat($0.y + box.minY) * CGFloat(scaleY)) }
