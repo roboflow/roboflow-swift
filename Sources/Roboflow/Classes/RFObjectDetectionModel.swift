@@ -25,7 +25,7 @@ public class RFObjectDetectionModel: RFModel {
     var thresholdProvider = ThresholdProvider()
     
     //Configure the parameters for the model
-    public override func configure(threshold: Double, overlap: Double, maxObjects: Float, processingMode: ProcessingMode = .balanced) {
+    public override func configure(threshold: Double, overlap: Double, maxObjects: Float, processingMode: ProcessingMode = .balanced, maxNumberPoints: Int = 500) {
         self.threshold = threshold
         self.overlap = overlap
         self.maxObjects = maxObjects

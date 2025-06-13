@@ -29,7 +29,7 @@ public class RFModel: NSObject {
     var coreMLRequest: VNCoreMLRequest!
     
     //Configure the parameters for the model
-    public func configure(threshold: Double, overlap: Double, maxObjects: Float, processingMode: ProcessingMode = .balanced) {}
+    public func configure(threshold: Double, overlap: Double, maxObjects: Float, processingMode: ProcessingMode = .balanced, maxNumberPoints: Int = 500) {}
     
     //Load the retrieved CoreML model into an already created RFObjectDetectionModel instance
     func loadMLModel(modelPath: URL, colors: [String: String], classes: [String]) -> Error? {
