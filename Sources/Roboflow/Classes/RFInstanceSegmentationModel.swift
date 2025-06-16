@@ -233,7 +233,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                     let keep = keeps[i]
                     
                     let classname = classes[Int(keep[5])]
-                    let detection = RFInstanceSegmentationPrediction(x: Float(box.midX) * scaleX, y: Float(box.midY) * scaleY, width: Float(box.width) * scaleX, height: Float(box.height) * scaleY, className: classname, confidence: keep[4], color: hexStringToCGColor(hex: colors[classname] ?? "#ff0000"), box: box, points:polygon, mask: nil)
+                    let detection = RFInstanceSegmentationPrediction(x: Float(box.midX) * scaleX, y: Float(box.midY) * scaleY, width: Float(box.width) * scaleX, height: Float(box.height) * scaleY, className: classname, confidence: keep[4], color: hexStringToCGColor(hex: colors[classname] ?? "#ff0000"), box: box, points:polygon)
                     final.append(detection)
                 }
             } else {
