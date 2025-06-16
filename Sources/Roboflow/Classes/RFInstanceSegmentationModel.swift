@@ -13,7 +13,6 @@ import Accelerate
 
 
 //Creates an instance of an ML model that's hosted on Roboflow
-@available(macOS 10.15, *)
 public class RFInstanceSegmentationModel: RFObjectDetectionModel {
     var classes = [String]()
     var maskProcessingMode: ProcessingMode = .balanced
@@ -31,18 +30,21 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
         self.colors = colors
         self.classes = classes
         do {
-            let config = MLModelConfiguration()
+            
             if #available(iOS 16.0, macOS 13.0, *) {
+                let config = MLModelConfiguration()
                 config.computeUnits = .cpuAndNeuralEngine
+                mlModel = try yolov8_seg(contentsOf: modelPath, configuration: config).model
+                visionModel = try VNCoreMLModel(for: mlModel)
+                visionModel.featureProvider = super.thresholdProvider
+                let request = VNCoreMLRequest(model: visionModel)
+                request.imageCropAndScaleOption = .scaleFill
+                coreMLRequest = request
             } else {
                 // Fallback on earlier versions
+                return UnsupportedOSError()
             }
-            mlModel = try yolov8_seg(contentsOf: modelPath, configuration: config).model
-            visionModel = try VNCoreMLModel(for: mlModel)
-            visionModel.featureProvider = super.thresholdProvider
-            let request = VNCoreMLRequest(model: visionModel)
-            request.imageCropAndScaleOption = .scaleFill
-            coreMLRequest = request
+           
         } catch {
             return error
         }
@@ -152,7 +154,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                 kept = MaskUtils.nonMaxSuppressionFast(detRows, iouThresh: Float(self.overlap))
             } else {
                 // Fallback on earlier versions
-                kept = [] as [[Float]]
+                completion(nil, UnsupportedOSError())
             }
             var final: [RFObjectDetectionPrediction] = []
             
@@ -234,6 +236,8 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                     let detection = RFInstanceSegmentationPrediction(x: Float(box.midX) * scaleX, y: Float(box.midY) * scaleY, width: Float(box.width) * scaleX, height: Float(box.height) * scaleY, className: classname, confidence: keep[4], color: hexStringToCGColor(hex: colors[classname] ?? "#ff0000"), box: box, points:polygon, mask: nil)
                     final.append(detection)
                 }
+            } else {
+                completion(nil, UnsupportedOSError())
             }
             completion(final, nil)
         } catch let error {

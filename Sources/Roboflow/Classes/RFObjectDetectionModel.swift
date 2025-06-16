@@ -9,7 +9,6 @@ import Foundation
 import CoreML
 import Vision
 //Creates an instance of an ML model that's hosted on Roboflow
-@available(macOS 10.15, *)
 public class RFObjectDetectionModel: RFModel {
 
     public override init() {
@@ -32,7 +31,11 @@ public class RFObjectDetectionModel: RFModel {
         thresholdProvider.values = ["iouThreshold": MLFeatureValue(double: self.overlap),
                                     "confidenceThreshold": MLFeatureValue(double: self.threshold)]
         if visionModel != nil {
-            visionModel.featureProvider = thresholdProvider
+            if #available(macOS 10.15, *) {
+                visionModel.featureProvider = thresholdProvider
+            } else {
+                // Fallback on earlier versions
+            }
         }
     }
     
@@ -40,13 +43,29 @@ public class RFObjectDetectionModel: RFModel {
     override func loadMLModel(modelPath: URL, colors: [String: String], classes: [String]) -> Error? {
         self.colors = colors
         do {
-            let config = MLModelConfiguration()
-            mlModel = try yolov5s(contentsOf: modelPath, configuration: config).model
-            visionModel = try VNCoreMLModel(for: mlModel)
-            visionModel.featureProvider = thresholdProvider
-            let request = VNCoreMLRequest(model: visionModel)
-            request.imageCropAndScaleOption = .scaleFill
-            coreMLRequest = request
+            if #available(macOS 10.14, *) {
+                let config = MLModelConfiguration()
+                if #available(macOS 10.15, *) {
+                    mlModel = try yolov5s(contentsOf: modelPath, configuration: config).model
+                } else {
+                    // Fallback on earlier versions
+                    return UnsupportedOSError()
+                }
+                visionModel = try VNCoreMLModel(for: mlModel)
+                if #available(macOS 10.15, *) {
+                    visionModel.featureProvider = thresholdProvider
+                } else {
+                    // Fallback on earlier versions
+                    return UnsupportedOSError()
+                }
+                let request = VNCoreMLRequest(model: visionModel)
+                request.imageCropAndScaleOption = .scaleFill
+                coreMLRequest = request
+            } else {
+                // Fallback on earlier versions
+                return UnsupportedOSError()
+            }
+            
         } catch {
             return error
         }
@@ -74,8 +93,14 @@ public class RFObjectDetectionModel: RFModel {
                 let box = VNImageRectForNormalizedRect(flippedBox, Int(buffer.width()), Int(buffer.height()))
                 let confidence = detectResult.confidence
                 var label:String = ""
-                if let recognizedResult = detectResult as? VNRecognizedObjectObservation, let classLabel = recognizedResult.labels.first?.identifier {
-                    label = classLabel
+                if #available(macOS 10.14, *) {
+                    if let recognizedResult = detectResult as? VNRecognizedObjectObservation, let classLabel = recognizedResult.labels.first?.identifier {
+                        label = classLabel
+                    }
+                } else {
+                    // Fallback on earlier versions
+                    completion(nil, UnsupportedOSError())
+                    return
                 }
                 let detection = RFObjectDetectionPrediction(x: Float((box.maxX+box.minX)/2.0), y: Float((box.maxY+box.minY)/2.0), width: Float((box.maxX-box.minX)), height: Float((box.maxY-box.minY)), className: label, confidence: confidence, color: hexStringToCGColor(hex: colors[label] ?? "#ff0000"), box: box)
                 detections.append(detection)

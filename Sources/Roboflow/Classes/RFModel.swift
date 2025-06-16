@@ -16,7 +16,6 @@ public enum ProcessingMode {
 }
 
 //Creates an instance of an ML model that's hosted on Roboflow
-@available(macOS 10.15, *)
 public class RFModel: NSObject {
 
     public override init() {
@@ -40,10 +39,15 @@ public class RFModel: NSObject {
     }
  
     public func detect(pixelBuffer: CVPixelBuffer) async -> ([RFPrediction]?, Error?) {
-        return await withCheckedContinuation { continuation in
-            detect(pixelBuffer: pixelBuffer) { result, error in
-                continuation.resume(returning: (result, error))
+        if #available(macOS 10.15, *) {
+            return await withCheckedContinuation { continuation in
+                detect(pixelBuffer: pixelBuffer) { result, error in
+                    continuation.resume(returning: (result, error))
+                }
             }
+        } else {
+            // Fallback on earlier versions
+            return (nil, UnsupportedOSError())
         }
     }
 }

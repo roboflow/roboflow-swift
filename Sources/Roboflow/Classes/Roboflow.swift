@@ -9,7 +9,6 @@ import CoreML
 import Vision
 
 ///Interface for interacting with the Roboflow API
-@available(macOS 10.15, *)
 public class RoboflowMobile: NSObject {
     
     var apiKey: String!
@@ -17,17 +16,20 @@ public class RoboflowMobile: NSObject {
     private var retries = 2
     
     //Initalize the SDK with the user's authorization key
-    @available(macOS 12.0, *)
     public init (apiKey: String) {
         super.init()
         self.apiKey = apiKey
         
         //Generate a unique device ID
-        guard let deviceID = getDeviceId() else {
-            fatalError("Failed to generate device ID")
+        if #available(macOS 12.0, *) {
+            guard let deviceID = getDeviceId() else {
+                fatalError("Failed to generate device ID")
+            }
+            self.deviceID = deviceID
+        } else {
+            // Fallback on earlier versions
+            fatalError("macOS 12.0 or later is required")
         }
-        
-        self.deviceID = deviceID
     }
     
     func getModelClass(modelType: String) -> RFModel {
@@ -88,10 +90,15 @@ public class RoboflowMobile: NSObject {
     }
 
     public func load(model: String, modelVersion: Int) async -> (RFModel?, Error?, String, String) {
-        return await withCheckedContinuation { continuation in
-            load(model: model, modelVersion: modelVersion) { result1, result2, result3, result4 in
-                continuation.resume(returning: (result1, result2, result3, result4))
+        if #available(macOS 10.15, *) {
+            return await withCheckedContinuation { continuation in
+                load(model: model, modelVersion: modelVersion) { result1, result2, result3, result4 in
+                    continuation.resume(returning: (result1, result2, result3, result4))
+                }
             }
+        } else {
+            // Fallback on earlier versions
+            return (nil, UnsupportedOSError(), "", "")
         }
     }
     
