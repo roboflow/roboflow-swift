@@ -6,7 +6,7 @@
     </br>
 </p>
 
-This is the source code for the Roboflow Swift SDK. It allows you to run [Object Detection](https://blog.roboflow.com/object-detection/) models locally on your iOS device that you have trained or have been trained on [Roboflow Universe](https://universe.roboflow.com) by others. The SDK pulls down the CoreML version of the trained model and caches it lcoally for running inference on the edge. 
+This is the source code for the Roboflow Swift SDK. It allows you to run [Object Detection](https://blog.roboflow.com/object-detection/) or [Instance Segmentation](https://blog.roboflow.com/instance-segmentation/) models locally on your iOS device that you have trained or have been trained on [Roboflow Universe](https://universe.roboflow.com) by others. The SDK pulls down the CoreML version of the trained model and caches it lcoally for running inference on the edge. 
 
 
 
