@@ -2,7 +2,7 @@
 //  RFObjectDetectionPrediction.swift
 //  Roboflow
 //
-//  Created by Nicholas Arner on 6/2/23.
+//  Created by Maxwell Stone on 6/16/25.
 //
 
 import Foundation
