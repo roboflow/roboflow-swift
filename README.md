@@ -168,3 +168,20 @@ To install with Cocoapods, make sure you have Cocoapods already installed and ad
 Then, run `pod install` in the root directory of your project. 
 
 If you've previously installed the Roboflow SDK via Cocoapods, you'll need to update your podfile to have an entry of `pod Roboflow`. 
+
+
+
+## Running Tests
+
+The SDK includes a comprehensive test suite that validates model loading and inference functionality. To run the tests:
+
+```bash
+swift test
+```
+
+The test suite includes:
+- **Model Loading Tests**: Validates that object detection and segmentation models load correctly from the Roboflow API
+- **Inference Tests**: Tests inference on real images using both object detection and instance segmentation models
+- **Cross-platform Compatibility**: All tests run without UIKit dependencies, ensuring compatibility across Apple platforms
+
+Test images are located in `Tests/assets/` and the tests automatically download and cache models for testing. All tests are designed to run without requiring additional setup or configuration.
