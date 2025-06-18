@@ -1,4 +1,4 @@
-// swift-tools-version:5.8
+// swift-tools-version:5.9
 
 import PackageDescription
 
@@ -8,15 +8,17 @@ let package = Package(
     platforms: [
         .iOS(.v16),
     ],
+    
     products: [
         .library(
             name: "Roboflow",
             targets: ["Roboflow"]),
     ],
+    dependencies: [],
     targets: [
         .target(
             name: "Roboflow",
-            path: "Sources/Roboflow"
+            dependencies: [], path: "Sources/Roboflow"
         ),
         .testTarget(name:"RoboflowTests", dependencies: ["Roboflow"])
     ]

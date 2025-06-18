@@ -5,7 +5,6 @@
 //  Created by Nicholas Arner on 4/12/22.
 //
 
-import UIKit
 import CoreML
 import Vision
 
@@ -22,34 +21,46 @@ public class RoboflowMobile: NSObject {
         self.apiKey = apiKey
         
         //Generate a unique device ID
-        guard let deviceID = UIDevice.current.identifierForVendor?.uuidString else {
-            return
+        if #available(macOS 12.0, *) {
+            guard let deviceID = getDeviceId() else {
+                fatalError("Failed to generate device ID")
+            }
+            self.deviceID = deviceID
+        } else {
+            // Fallback on earlier versions
+            fatalError("macOS 12.0 or later is required")
         }
-        
-        self.deviceID = deviceID
+    }
+    
+    func getModelClass(modelType: String) -> RFModel {
+        if (modelType.contains("seg")) {
+            return RFInstanceSegmentationModel()
+        }
+        return RFObjectDetectionModel()
     }
     
     //Start the process of fetching the CoreMLModel
     @available(*, renamed: "load(model:modelVersion:)")
-    public func load(model: String, modelVersion: Int, completion: @escaping (RFObjectDetectionModel?, Error?, String, String)->()) {
+    public func load(model: String, modelVersion: Int, completion: @escaping (RFModel?, Error?, String, String)->()) {
         if let modelInfo = loadModelCache(modelName: model, modelVersion: modelVersion),
             let modelURL = modelInfo["compiledModelURL"] as? String,
             let colors = modelInfo["colors"] as? [String: String],
+           let classes = modelInfo["classes"] as? [String],
             let name = modelInfo["name"] as? String,
             let modelType = modelInfo["modelType"] as? String {
             
             getConfigDataBackground(modelName: model, modelVersion: modelVersion, apiKey: apiKey, deviceID: deviceID)
             
-            let objectDetectionModel = RFObjectDetectionModel()
+            let modelObject = getModelClass(modelType: modelType)
 
             do {
                 let documentsURL = try FileManager.default.url(for: .documentDirectory,
                                                                 in: .userDomainMask,
                                                                 appropriateFor: nil,
                                                                 create: false)
-                _ = objectDetectionModel.loadMLModel(modelPath: documentsURL.appendingPathComponent(modelURL), colors: colors)
+                _ = modelObject.loadMLModel(modelPath: documentsURL.appendingPathComponent(modelURL), colors: colors, classes: classes)
                 
-                completion(objectDetectionModel, nil, name, modelType)
+                completion(modelObject, nil, name, modelType)
             } catch {
                 clearAndRetryLoadingModel(model, modelVersion, completion)
             }
@@ -60,9 +71,9 @@ public class RoboflowMobile: NSObject {
                 if let err = error {
                     completion(nil, err, "", "")
                 } else if let fetchedModel = fetchedModel {
-                    let objectDetectionModel = RFObjectDetectionModel()
-                    _ = objectDetectionModel.loadMLModel(modelPath: fetchedModel, colors: colors ?? [:])
-                    completion(objectDetectionModel, nil, modelName, modelType)
+                    let modelObject = getModelClass(modelType: modelType)
+                    _ = modelObject.loadMLModel(modelPath: fetchedModel, colors: colors ?? [:], classes: classes ?? [])
+                    completion(modelObject, nil, modelName, modelType)
                 } else {
                     print("No Model Found. Trying Again.")
                     clearAndRetryLoadingModel(model, modelVersion, completion)
@@ -73,16 +84,21 @@ public class RoboflowMobile: NSObject {
         }
     }
 
-    private func clearAndRetryLoadingModel(_ model: String, _ modelVersion: Int, _ completion: @escaping (RFObjectDetectionModel?, Error?, String, String)->()) {
+    private func clearAndRetryLoadingModel(_ model: String, _ modelVersion: Int, _ completion: @escaping (RFModel?, Error?, String, String)->()) {
         clearModelCache(modelName: model, modelVersion: modelVersion)
         self.load(model: model, modelVersion: modelVersion, completion: completion)
     }
 
-    public func load(model: String, modelVersion: Int) async -> (RFObjectDetectionModel?, Error?, String, String) {
-        return await withCheckedContinuation { continuation in
-            load(model: model, modelVersion: modelVersion) { result1, result2, result3, result4 in
-                continuation.resume(returning: (result1, result2, result3, result4))
+    public func load(model: String, modelVersion: Int) async -> (RFModel?, Error?, String, String) {
+        if #available(macOS 10.15, *) {
+            return await withCheckedContinuation { continuation in
+                load(model: model, modelVersion: modelVersion) { result1, result2, result3, result4 in
+                    continuation.resume(returning: (result1, result2, result3, result4))
+                }
             }
+        } else {
+            // Fallback on earlier versions
+            return (nil, UnsupportedOSError(), "", "")
         }
     }
     
@@ -192,7 +208,7 @@ public class RoboflowMobile: NSObject {
         return nil
     }
 
-    private func clearModelCache(modelName: String, modelVersion: Int) {
+    public func clearModelCache(modelName: String, modelVersion: Int) {
         UserDefaults.standard.removeObject(forKey: "\(modelName)-\(modelVersion)")
     }
     
@@ -234,50 +250,6 @@ public class RoboflowMobile: NSObject {
             completion(fileURL)
         }
         downloadTask.resume()
-    }
-   
-    //Upload an image to a provided project
-    public func uploadImage(image: UIImage, project: String, completion: @escaping (UploadResult)->()) {
-        let encodedImage = convertImageToBase64String(img: image)
-        let uuid = UUID().uuidString
-        
-        var request = URLRequest(url: URL(string: "https://api.roboflow.com/dataset/\(project)/upload?api_key=\(apiKey!)&name=\(uuid)&split=train")!,timeoutInterval: Double.infinity)
-
-        request.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.httpMethod = "POST"
-        request.httpBody = encodedImage.toData()
-        
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            // Parse Response to String
-            guard let data = data else {
-                completion(UploadResult.Error)
-                return
-            }
-
-            do {
-                let dict = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
-                let duplicate = dict!["duplicate"] as? Bool
-                
-                if duplicate ==  true {
-                    completion(UploadResult.Duplicate)
-                } else {
-                    let success = dict!["success"] as! Bool
-                    if success == true {
-                        completion(UploadResult.Success)
-                    } else {
-                        completion(UploadResult.Error)
-                    }
-                }
-
-            } catch {
-                print(error.localizedDescription)
-                completion(UploadResult.Error)
-            }
-        }.resume()
-    }
-    
-    func convertImageToBase64String (img: UIImage) -> String {
-        return img.jpegData(compressionQuality: 1)?.base64EncodedString() ?? ""
     }
 }
 

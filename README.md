@@ -6,7 +6,7 @@
     </br>
 </p>
 
-This is the source code for the Roboflow Swift SDK. It allows you to run [Object Detection](https://blog.roboflow.com/object-detection/) models locally on your iOS device that you have trained or have been trained on [Roboflow Universe](https://universe.roboflow.com) by others. The SDK pulls down the CoreML version of the trained model and caches it lcoally for running inference on the edge. 
+This is the source code for the Roboflow Swift SDK. It allows you to run [Object Detection](https://blog.roboflow.com/object-detection/) or [Instance Segmentation](https://blog.roboflow.com/instance-segmentation/) models locally on your iOS device that you have trained or have been trained on [Roboflow Universe](https://universe.roboflow.com) by others. The SDK pulls down the CoreML version of the trained model and caches it lcoally for running inference on the edge. 
 
 
 
@@ -34,7 +34,8 @@ rf.load(model: model, modelVersion: modelVersion) { [self] model, error, modelNa
     if error != nil {
         print(error?.localizedDescription as Any)
     } else {
-        model?.configure(threshold: threshold, overlap: overlap, maxObjects: maxObjects)
+        model?.configure(threshold: threshold, overlap: overlap, maxObjects: maxObjects) // object detection models
+        model?.configure(threshold: threshold, overlap: overlap, maxObjects: maxObjects, processingMode: .performance or .balanced or .quality, maxNumberPoints: maximum number of output polygon points) // instance segmentation models
     }
 }
 ```
@@ -85,7 +86,7 @@ The included example app shows a complete implemention illustrating this process
 
 ## Inference Results ###
 
-You'll have noticed that when an inference is complete, the SDK returns an array of `RFObjectDetectionPrediction` results. These are structs that contain data on what object was detected in the image, as well as information on the bounding box that encapsulates that object: 
+You'll have noticed that when an inference is complete, the SDK returns an array of `RFObjectDetectionPrediction` or `RFInstanceSegmentationPrediction` results. These are structs that contain data on what object was detected in the image, as well as information on the bounding box that encapsulates that object: 
 
 ```
 x: Float
@@ -96,9 +97,10 @@ className: String
 confdience: Float 
 color: UIColor
 box: CGRect
+points: [CGPoint] // only on instance segmentation models
 ```
 
-Call `getValues` on the returned `RFObjectDetectionPrediction` to get these results. 
+Call `getValues` on the returned `RFObjectDetectionPrediction` or `RFInstanceSegmentationPrediction` to get these results. 
 
 
 
