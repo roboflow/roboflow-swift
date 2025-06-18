@@ -107,21 +107,23 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
             
             let xs = outputSize.width / 640
             let ys = outputSize.height / 640
+            
+            // ---- read bbox (cx,cy,w,h)  ----
+            @inline(__always) func col(_ k: Int, _ i: Int) -> Float {
+                basePtr[k * spatial + i]       // fast pointer math, no multiply in inner loops
+            }
             // MARK: -- parallel pass over detections
             DispatchQueue.concurrentPerform(iterations: numDet) { i in
-                // ---- read bbox (cx,cy,w,h)  ----
-                @inline(__always) func col(_ k: Int) -> Float {
-                    basePtr[k * spatial + i]       // fast pointer math, no multiply in inner loops
-                }
-                let cx = col(0), cy = col(1)
-                let w  = col(2), h  = col(3)
+                
+                let cx = col(0, i), cy = col(1, i)
+                let w  = col(2, i), h  = col(3, i)
 
                 // ---- arg-max over class scores ----
                 var bestScore: Float = 0
                 var bestCls  : Int   = -1
                 var k = 4                         // first class score column
                 while k < 4 + numCls {
-                    let s = col(k)
+                    let s = col(k, i)
                     if s > bestScore { bestScore = s; bestCls = k-4 }
                     k &+= 1
                 }
@@ -131,7 +133,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                 var localCoeff = [Float](repeating: 0, count: numMasks)
                 var cidx = 4 + numCls               // first coeff column
                 for m in 0..<numMasks {
-                    localCoeff[m] = col(cidx)
+                    localCoeff[m] = col(cidx, i)
                     cidx &+= 1
                 }
 
