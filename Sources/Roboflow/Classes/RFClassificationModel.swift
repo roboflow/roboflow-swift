@@ -78,7 +78,7 @@ public class RFClassificationModel: RFModel {
         return nil
     }
     
-    //Run image through model and return Classification predictions
+    //Run image through model and return Classification predictions (converted to detection format for compatibility)
     public override func detect(pixelBuffer buffer: CVPixelBuffer, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
         classify(pixelBuffer: buffer) { [weak self] predictions, error in
             // Convert classification predictions to object detection predictions for compatibility
@@ -97,6 +97,22 @@ public class RFClassificationModel: RFModel {
                 )
             }
             completion(objectDetectionPredictions, error)
+        }
+    }
+    
+    //Async version that returns RFClassificationPrediction objects as RFPrediction
+    public override func detect(pixelBuffer: CVPixelBuffer) async -> ([RFPrediction]?, Error?) {
+        if #available(macOS 10.15, *) {
+            return await withCheckedContinuation { continuation in
+                classify(pixelBuffer: pixelBuffer) { predictions, error in
+                    // Return RFClassificationPrediction objects as RFPrediction
+                    let rfPredictions = predictions?.map { $0 as RFPrediction }
+                    continuation.resume(returning: (rfPredictions, error))
+                }
+            }
+        } else {
+            // Fallback on earlier versions
+            return (nil, UnsupportedOSError())
         }
     }
     
@@ -134,6 +150,20 @@ public class RFClassificationModel: RFModel {
             completion(predictions, nil)
         } catch let error {
             completion(nil, error)
+        }
+    }
+    
+    //Async version that returns RFClassificationPrediction objects
+    public func classify(pixelBuffer buffer: CVPixelBuffer) async -> ([RFClassificationPrediction]?, Error?) {
+        if #available(macOS 10.15, *) {
+            return await withCheckedContinuation { continuation in
+                classify(pixelBuffer: buffer) { predictions, error in
+                    continuation.resume(returning: (predictions, error))
+                }
+            }
+        } else {
+            // Fallback on earlier versions
+            return (nil, UnsupportedOSError())
         }
     }
 }

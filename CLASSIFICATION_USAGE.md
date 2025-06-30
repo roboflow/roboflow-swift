@@ -9,14 +9,28 @@ The Roboflow Swift SDK now supports image classification models, including ResNe
 ## Classes Added
 
 ### RFClassificationPrediction
+The main prediction object returned by classification models:
 - `className: String` - The predicted class name
 - `confidence: Float` - Confidence score (0.0 to 1.0)
 - `classIndex: Int` - Index of the predicted class
+- `getValues() -> [String: Any]` - Returns dictionary representation
+
+```swift
+// Example working with RFClassificationPrediction objects
+let prediction = RFClassificationPrediction(className: "cat", confidence: 0.89, classIndex: 2)
+print(prediction.className)     // "cat"
+print(prediction.confidence)    // 0.89
+print(prediction.classIndex)    // 2
+print(prediction.getValues())   // ["class": "cat", "confidence": 0.89, "classIndex": 2]
+```
 
 ### RFClassificationModel
+The main classification model class:
 - Extends `RFModel` to handle classification tasks
 - Supports both local models and Roboflow API models
 - Compatible with ResNet and other classification architectures
+- Returns `RFClassificationPrediction` objects from `classify()` methods
+- Returns `RFPrediction` objects from generic `detect()` methods (can be cast to `RFClassificationPrediction`)
 
 ## Installation
 
@@ -58,6 +72,7 @@ classificationModel.configure(threshold: 0.3, overlap: 0.0, maxObjects: 0)
 func classifyImage() async {
     guard let image = UIImage(named: "your_image.jpg") else { return }
     
+    // Use classify() method to get RFClassificationPrediction objects directly
     let (predictions, error) = await classificationModel.classify(image: image)
     
     if let error = error {
@@ -70,17 +85,22 @@ func classifyImage() async {
         return
     }
     
-    // Print results
+    // Work with RFClassificationPrediction objects
     for prediction in predictions {
         print("Class: \(prediction.className)")
-        print("Confidence: \(prediction.confidence)")
-        print("Index: \(prediction.classIndex)")
+        print("Confidence: \(String(format: "%.3f", prediction.confidence))")
+        print("Class Index: \(prediction.classIndex)")
+        print("Raw Values: \(prediction.getValues())")
     }
     
-    // Get top prediction
+    // Get top prediction (predictions are sorted by confidence)
     if let topPrediction = predictions.first {
-        print("Top prediction: \(topPrediction.className) (\(topPrediction.confidence))")
+        print("🏆 Top prediction: \(topPrediction.className) (\(String(format: "%.3f", topPrediction.confidence)))")
     }
+    
+    // Filter high confidence predictions
+    let highConfidencePredictions = predictions.filter { $0.confidence > 0.7 }
+    print("High confidence predictions: \(highConfidencePredictions.count)")
 }
 ```
 
@@ -90,6 +110,7 @@ func classifyImage() async {
 func classifyImageWithCallback() {
     guard let image = UIImage(named: "your_image.jpg") else { return }
     
+    // Use classify() method to get RFClassificationPrediction objects
     classificationModel.classify(image: image) { predictions, error in
         if let error = error {
             print("Classification error: \(error)")
@@ -101,8 +122,36 @@ func classifyImageWithCallback() {
             return
         }
         
+        // Work with RFClassificationPrediction objects
         for prediction in predictions {
-            print("Class: \(prediction.className), Confidence: \(prediction.confidence)")
+            print("Class: \(prediction.className)")
+            print("Confidence: \(String(format: "%.3f", prediction.confidence))")
+            print("Class Index: \(prediction.classIndex)")
+        }
+    }
+}
+```
+
+#### Using Generic detect() Method
+
+You can also use the generic `detect()` method that returns `RFPrediction` objects:
+
+```swift
+func useGenericDetectMethod() async {
+    // Convert image to CVPixelBuffer (helper method needed)
+    let pixelBuffer = convertImageToPixelBuffer(image)
+    
+    // Use generic detect method - returns RFPrediction objects
+    let (predictions, error) = await classificationModel.detect(pixelBuffer: pixelBuffer)
+    
+    guard let predictions = predictions else { return }
+    
+    for prediction in predictions {
+        // Cast to RFClassificationPrediction to access specific properties
+        if let classificationPrediction = prediction as? RFClassificationPrediction {
+            print("Class: \(classificationPrediction.className)")
+            print("Confidence: \(classificationPrediction.confidence)")
+            print("Index: \(classificationPrediction.classIndex)")
         }
     }
 }

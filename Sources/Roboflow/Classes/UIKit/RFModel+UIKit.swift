@@ -126,10 +126,15 @@ extension RFClassificationModel {
     }
 
     public func classify(image: UIImage) async -> ([RFClassificationPrediction]?, Error?) {
-        return await withCheckedContinuation { continuation in
-            classify(image: image) { result, error in
-                continuation.resume(returning: (result, error))
+        if #available(macOS 10.15, *) {
+            return await withCheckedContinuation { continuation in
+                classify(image: image) { result, error in
+                    continuation.resume(returning: (result, error))
+                }
             }
+        } else {
+            // Fallback on earlier versions
+            return (nil, UnsupportedOSError())
         }
     }
 }
