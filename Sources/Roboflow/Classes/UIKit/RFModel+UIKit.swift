@@ -72,6 +72,68 @@ extension RFModel {
     }
 }
 
+extension RFClassificationModel {
+    /// Run image through classification model and return predictions
+    public func classify(image: UIImage, completion: @escaping (([RFClassificationPrediction]?, Error?) -> Void)) {
+        let size = image.size
+        let attrs = [
+            kCVPixelBufferCGImageCompatibilityKey: kCFBooleanTrue!,
+            kCVPixelBufferCGBitmapContextCompatibilityKey: kCFBooleanTrue!
+        ] as CFDictionary
+
+        var pixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            Int(size.width),
+            Int(size.height),
+            kCVPixelFormatType_32ARGB,
+            attrs,
+            &pixelBuffer
+        )
+
+        guard status == kCVReturnSuccess, let buffer = pixelBuffer else {
+            completion(nil, nil)
+            return
+        }
+
+        CVPixelBufferLockBaseAddress(buffer, [])
+
+        guard let context = CGContext(
+            data: CVPixelBufferGetBaseAddress(buffer),
+            width: Int(size.width),
+            height: Int(size.height),
+            bitsPerComponent: 8,
+            bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue
+        ) else {
+            CVPixelBufferUnlockBaseAddress(buffer, [])
+            completion(nil, nil)
+            return
+        }
+
+        context.clear(CGRect(x: 0, y: 0, width: size.width, height: size.height))
+        context.translateBy(x: 0, y: size.height)
+        context.scaleBy(x: 1.0, y: -1.0)
+
+        UIGraphicsPushContext(context)
+        image.draw(in: CGRect(origin: .zero, size: size))
+        UIGraphicsPopContext()
+
+        CVPixelBufferUnlockBaseAddress(buffer, [])
+
+        classify(pixelBuffer: buffer, completion: completion)
+    }
+
+    public func classify(image: UIImage) async -> ([RFClassificationPrediction]?, Error?) {
+        return await withCheckedContinuation { continuation in
+            classify(image: image) { result, error in
+                continuation.resume(returning: (result, error))
+            }
+        }
+    }
+}
+
 #endif
 
 func hexStringToCGColor (hex:String) -> CGColor {
