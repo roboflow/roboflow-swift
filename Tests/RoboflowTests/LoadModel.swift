@@ -97,6 +97,62 @@ final class LoadModel: XCTestCase {
         return buffer
     }
 
+    // Helper function to load image and convert to CVPixelBuffer
+    private func loadImageAsPixelBuffer(from imagePath: String) -> CVPixelBuffer? {
+        let imageURL = URL(fileURLWithPath: imagePath)
+        
+        guard let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+            XCTFail("Failed to load test image from \(imagePath)")
+            return nil
+        }
+        
+        // Create CVPixelBuffer from CGImage
+        let width = cgImage.width
+        let height = cgImage.height
+        let attrs = [
+            kCVPixelBufferCGImageCompatibilityKey: kCFBooleanTrue!,
+            kCVPixelBufferCGBitmapContextCompatibilityKey: kCFBooleanTrue!
+        ] as CFDictionary
+
+        var pixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            width,
+            height,
+            kCVPixelFormatType_32ARGB,
+            attrs,
+            &pixelBuffer
+        )
+        
+        guard status == kCVReturnSuccess, let buffer = pixelBuffer else {
+            XCTFail("Failed to create pixel buffer")
+            return nil
+        }
+        
+        // Draw the CGImage into the pixel buffer
+        CVPixelBufferLockBaseAddress(buffer, [])
+        
+        guard let context = CGContext(
+            data: CVPixelBufferGetBaseAddress(buffer),
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue
+        ) else {
+            CVPixelBufferUnlockBaseAddress(buffer, [])
+            XCTFail("Failed to create graphics context")
+            return nil
+        }
+        
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        CVPixelBufferUnlockBaseAddress(buffer, [])
+        
+        return buffer
+    }
+
     func testLoadModel() async {
         let rf = RoboflowMobile(apiKey: API_KEY)
         let (model, error, _, _) = await rf.load(model: "playing-cards-ow27d", modelVersion: 2)
@@ -153,8 +209,7 @@ final class LoadModel: XCTestCase {
         // Note: predictions might be nil if no objects are detected in the test image, which is expected
         XCTAssertNotNil(results)
         XCTAssert(results?.count ?? 0 > 0)
-    }
-    
+    }    
     // MARK: - ResNet Classification Tests
     
     func testLoadResNetModel() async {
