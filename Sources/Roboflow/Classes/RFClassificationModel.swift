@@ -58,7 +58,19 @@ public class RFClassificationModel: RFModel {
             if #available(macOS 10.14, *) {
                 let config = MLModelConfiguration()
                 if #available(macOS 10.15, *) {
-                    mlModel = try MLModel(contentsOf: modelPath, configuration: config)
+                    var modelURL = modelPath
+                    
+                    // If the model is .mlpackage, compile it first
+                    if modelPath.pathExtension == "mlpackage" {
+                        do {
+                            let compiledModelURL = try MLModel.compileModel(at: modelPath)
+                            modelURL = compiledModelURL
+                        } catch {
+                            return error
+                        }
+                    }
+                    
+                    mlModel = try MLModel(contentsOf: modelURL, configuration: config)
                 } else {
                     // Fallback on earlier versions
                     return UnsupportedOSError()
@@ -78,97 +90,164 @@ public class RFClassificationModel: RFModel {
         return nil
     }
     
-    //Run image through model and return Classification predictions as Object Detection predictions for compatibility
-    public override func detect(pixelBuffer buffer: CVPixelBuffer, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
-        classify(pixelBuffer: buffer) { [weak self] predictions, error in
-            // Convert classification predictions to object detection predictions for compatibility with base class
-            let objectDetectionPredictions = predictions?.map { prediction in
-                // Create a full-image bounding box for classification results
-                let box = CGRect(x: 0, y: 0, width: Int(buffer.width()), height: Int(buffer.height()))
-                return RFObjectDetectionPrediction(
-                    x: Float(buffer.width()) / 2.0,
-                    y: Float(buffer.height()) / 2.0,
-                    width: Float(buffer.width()),
-                    height: Float(buffer.height()),
-                    className: prediction.className,
-                    confidence: prediction.confidence,
-                    color: hexStringToCGColor(hex: "#00ff00"), // Default green color
-                    box: box
-                )
-            }
-            completion(objectDetectionPredictions, error)
-        }
-    }
-    
-    //Run image through model and return Classification predictions directly
-    public func detect(pixelBuffer buffer: CVPixelBuffer, completion: @escaping (([RFClassificationPrediction]?, Error?) -> Void)) {
-        classify(pixelBuffer: buffer, completion: completion)
-    }
-    
-    //Async version that returns RFClassificationPrediction objects as RFPrediction
-    public override func detect(pixelBuffer: CVPixelBuffer) async -> ([RFPrediction]?, Error?) {
-        if #available(macOS 10.15, *) {
-            return await withCheckedContinuation { continuation in
-                classify(pixelBuffer: pixelBuffer) { predictions, error in
-                    // Return RFClassificationPrediction objects as RFPrediction
-                    let rfPredictions = predictions?.map { $0 as RFPrediction }
-                    continuation.resume(returning: (rfPredictions, error))
-                }
-            }
-        } else {
-            // Fallback on earlier versions
-            return (nil, UnsupportedOSError())
-        }
-    }
-    
     //Run image through model and return Classification predictions
-    public func classify(pixelBuffer buffer: CVPixelBuffer, completion: @escaping (([RFClassificationPrediction]?, Error?) -> Void)) {
-        guard let coreMLRequest = self.coreMLRequest else {
+    public override func detect(pixelBuffer buffer: CVPixelBuffer, completion: @escaping (([RFPrediction]?, Error?) -> Void)) {
+        guard let mlModel = self.mlModel else {
             completion(nil, "Model initialization failed.")
             return
         }
-        let handler = VNImageRequestHandler(cvPixelBuffer: buffer)
+        
 
+        
         do {
-            try handler.perform([coreMLRequest])
-            
-            guard let classificationResults = coreMLRequest.results as? [VNClassificationObservation] else { 
-                completion(nil, "Unable to get classification results from model")
-                return 
+            // Get the actual input name from model description
+            guard let inputName = mlModel.modelDescription.inputDescriptionsByName.keys.first,
+                  let inputDescription = mlModel.modelDescription.inputDescriptionsByName[inputName] else {
+                completion(nil, "Could not find model input name")
+                return
             }
             
-            var predictions: [RFClassificationPrediction] = []
-            for (index, result) in classificationResults.enumerated() {
-                if result.confidence >= Float(threshold) {
-                    let prediction = RFClassificationPrediction(
-                        className: result.identifier,
-                        confidence: result.confidence,
-                        classIndex: index
-                    )
-                    predictions.append(prediction)
+            // Get expected image dimensions
+            let inputImage: MLFeatureValue
+            if let imageConstraint = inputDescription.imageConstraint {
+                let targetWidth = Int(imageConstraint.pixelsWide)
+                let targetHeight = Int(imageConstraint.pixelsHigh)
+                
+                // Create a resized pixel buffer
+                let resizedBuffer = resizePixelBuffer(buffer, targetWidth: targetWidth, targetHeight: targetHeight)
+                inputImage = MLFeatureValue(pixelBuffer: resizedBuffer ?? buffer)
+            } else {
+                // Use original buffer if no constraints
+                inputImage = MLFeatureValue(pixelBuffer: buffer)
+            }
+            
+            let inputDict = [inputName: inputImage]
+            let inputProvider = try MLDictionaryFeatureProvider(dictionary: inputDict)
+            
+            // Run prediction directly with CoreML
+            let prediction = try mlModel.prediction(from: inputProvider)
+            
+            // Get the actual output name from model description
+            guard let outputName = mlModel.modelDescription.outputDescriptionsByName.keys.first,
+                  let output = prediction.featureValue(for: outputName) else {
+                completion(nil, "Could not find model output")
+                return
+            }
+            
+            var predictions: [RFPrediction] = []
+            
+            // Handle different output types
+            if output.type == .dictionary, let probDict = output.dictionaryValue as? [String: NSNumber] {
+                // Dictionary output (class name -> probability)
+                for (className, probValue) in probDict {
+                    let confidence = probValue.floatValue
+                    if confidence >= Float(threshold) {
+                        let prediction = RFClassificationPrediction(
+                            className: className,
+                            confidence: confidence,
+                            classIndex: 0 // Index not available in dictionary output
+                        )
+                        predictions.append(prediction)
+                    }
+                }
+            } else if let multiArray = output.multiArrayValue {
+                // Multi-array output (probabilities from model)
+                let probabilities = multiArray.dataPointer.bindMemory(to: Float.self, capacity: multiArray.count)
+                
+                for i in 0..<multiArray.count {
+                    let confidence = probabilities[i]
+                    if confidence >= Float(threshold) {
+                        let prediction = RFClassificationPrediction(
+                            className: "class_\(i)", // Generic class name
+                            confidence: confidence,
+                            classIndex: i
+                        )
+                        predictions.append(prediction)
+                    }
                 }
             }
             
-            // Sort by confidence (highest first)
-            predictions.sort { $0.confidence > $1.confidence }
+            // Sort by confidence (highest first) - cast to RFClassificationPrediction since that's what we create
+            predictions.sort { 
+                guard let pred1 = $0 as? RFClassificationPrediction, 
+                      let pred2 = $1 as? RFClassificationPrediction else { 
+                    return false 
+                }
+                return pred1.confidence > pred2.confidence
+            }
             
             completion(predictions, nil)
+            
         } catch let error {
             completion(nil, error)
         }
     }
     
-    //Async version that returns RFClassificationPrediction objects
-    public func classify(pixelBuffer buffer: CVPixelBuffer) async -> ([RFClassificationPrediction]?, Error?) {
-        if #available(macOS 10.15, *) {
-            return await withCheckedContinuation { continuation in
-                classify(pixelBuffer: buffer) { predictions, error in
-                    continuation.resume(returning: (predictions, error))
-                }
-            }
-        } else {
-            // Fallback on earlier versions
-            return (nil, UnsupportedOSError())
+    // Helper function to resize CVPixelBuffer
+    private func resizePixelBuffer(_ pixelBuffer: CVPixelBuffer, targetWidth: Int, targetHeight: Int) -> CVPixelBuffer? {
+        let attrs = [
+            kCVPixelBufferCGImageCompatibilityKey: kCFBooleanTrue!,
+            kCVPixelBufferCGBitmapContextCompatibilityKey: kCFBooleanTrue!
+        ] as CFDictionary
+
+        var newPixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            targetWidth,
+            targetHeight,
+            kCVPixelFormatType_32ARGB,
+            attrs,
+            &newPixelBuffer
+        )
+        
+        guard status == kCVReturnSuccess, let buffer = newPixelBuffer else {
+            return nil
         }
+        
+        CVPixelBufferLockBaseAddress(buffer, [])
+        CVPixelBufferLockBaseAddress(pixelBuffer, CVPixelBufferLockFlags.readOnly)
+        
+        // Create contexts for both buffers
+        guard let context = CGContext(
+            data: CVPixelBufferGetBaseAddress(buffer),
+            width: targetWidth,
+            height: targetHeight,
+            bitsPerComponent: 8,
+            bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue
+        ) else {
+            CVPixelBufferUnlockBaseAddress(buffer, [])
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, CVPixelBufferLockFlags.readOnly)
+            return nil
+        }
+        
+        // Create CGImage from source pixel buffer
+        let originalWidth = CVPixelBufferGetWidth(pixelBuffer)
+        let originalHeight = CVPixelBufferGetHeight(pixelBuffer)
+        
+        guard let sourceContext = CGContext(
+            data: CVPixelBufferGetBaseAddress(pixelBuffer),
+            width: originalWidth,
+            height: originalHeight,
+            bitsPerComponent: 8,
+            bytesPerRow: CVPixelBufferGetBytesPerRow(pixelBuffer),
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue
+        ), let cgImage = sourceContext.makeImage() else {
+            CVPixelBufferUnlockBaseAddress(buffer, [])
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, CVPixelBufferLockFlags.readOnly)
+            return nil
+        }
+        
+        // Draw resized image
+        context.interpolationQuality = .high
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: targetWidth, height: targetHeight))
+        
+        CVPixelBufferUnlockBaseAddress(buffer, [])
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, CVPixelBufferLockFlags.readOnly)
+        
+        return buffer
     }
+
 }

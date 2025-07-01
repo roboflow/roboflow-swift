@@ -9,9 +9,9 @@ import Foundation
 import CoreGraphics
 
 public class RFClassificationPrediction: RFPrediction {
-    let className: String
-    let confidence: Float
-    let classIndex: Int
+    public let className: String
+    public let confidence: Float
+    public let classIndex: Int
     
     public init(className: String, confidence: Float, classIndex: Int) {
         self.className = className

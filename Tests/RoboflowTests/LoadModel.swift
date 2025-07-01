@@ -11,9 +11,6 @@ import CoreVideo
 import CoreGraphics
 import ImageIO
 import Foundation
-#if canImport(UIKit)
-import UIKit
-#endif
 
 // cash counter api_key (already public)
 var API_KEY = "fEto4us79wdzRJ2jkO6U"
@@ -32,7 +29,7 @@ final class LoadModel: XCTestCase {
     
     // Helper function to get ResNet model path from assets directory
     private func getResNetModelPath() -> URL? {
-        let modelPath = "Tests/assets/ResNet.mlmodelc"
+        let modelPath = "Tests/assets/resnet.mlpackage"
         let modelURL = URL(fileURLWithPath: modelPath)
         
         // Check if model file exists
@@ -99,13 +96,6 @@ final class LoadModel: XCTestCase {
         
         return buffer
     }
-    
-    #if canImport(UIKit)
-    // Helper function to load UIImage for UIKit tests
-    private func loadUIImage(from imagePath: String) -> UIImage? {
-        return UIImage(contentsOfFile: imagePath)
-    }
-    #endif
 
     func testLoadModel() async {
         let rf = RoboflowMobile(apiKey: API_KEY)
@@ -205,17 +195,22 @@ final class LoadModel: XCTestCase {
             return
         }
         
-        // Test classify method with CVPixelBuffer
-        let (predictions, inferenceError) = await classificationModel.classify(pixelBuffer: buffer)
+        // Test detect method with CVPixelBuffer
+        let (basePredictions, inferenceError) = await classificationModel.detect(pixelBuffer: buffer)
         
         XCTAssertNil(inferenceError, "Classification inference failed: \(inferenceError?.localizedDescription ?? "unknown error")")
-        XCTAssertNotNil(predictions, "Predictions should not be nil")
+        XCTAssertNotNil(basePredictions, "Predictions should not be nil")
         
-        if let predictions = predictions {
-            XCTAssertGreaterThan(predictions.count, 0, "Should have at least one prediction")
+        if let basePredictions = basePredictions {
+            XCTAssertGreaterThan(basePredictions.count, 0, "Should have at least one prediction")
             
-            // Test RFClassificationPrediction properties
-            for prediction in predictions {
+            // Cast to RFClassificationPrediction to test specific properties
+            for basePrediction in basePredictions {
+                guard let prediction = basePrediction as? RFClassificationPrediction else {
+                    XCTFail("Prediction should be of type RFClassificationPrediction")
+                    continue
+                }
+                
                 XCTAssertFalse(prediction.className.isEmpty, "Class name should not be empty")
                 XCTAssertGreaterThanOrEqual(prediction.confidence, 0.0, "Confidence should be >= 0")
                 XCTAssertLessThanOrEqual(prediction.confidence, 1.0, "Confidence should be <= 1")
@@ -228,9 +223,11 @@ final class LoadModel: XCTestCase {
                 XCTAssertNotNil(values["classIndex"])
             }
             
-            print("ResNet Classification Results:")
-            for (index, prediction) in predictions.prefix(5).enumerated() {
-                print("  \(index + 1). \(prediction.className) - \(String(format: "%.3f", prediction.confidence))")
+            // Verify we got meaningful results
+            XCTAssertGreaterThan(basePredictions.count, 0, "Should have predictions")
+            if let topBasePrediction = basePredictions.first,
+               let topPrediction = topBasePrediction as? RFClassificationPrediction {
+                XCTAssertGreaterThan(topPrediction.confidence, 0.1, "Top prediction should have reasonable confidence")
             }
         }
     }
@@ -255,26 +252,31 @@ final class LoadModel: XCTestCase {
             return
         }
         
-        // Test detect method that returns RFClassificationPrediction objects
-        let (predictions, inferenceError) = await classificationModel.detect(pixelBuffer: buffer)
+        // Test detect method that returns RFPrediction objects (but are actually RFClassificationPrediction)
+        let (basePredictions, inferenceError) = await classificationModel.detect(pixelBuffer: buffer)
         
         XCTAssertNil(inferenceError, "Detection inference failed: \(inferenceError?.localizedDescription ?? "unknown error")")
-        XCTAssertNotNil(predictions, "Predictions should not be nil")
+        XCTAssertNotNil(basePredictions, "Predictions should not be nil")
         
-        if let predictions = predictions {
-            XCTAssertGreaterThan(predictions.count, 0, "Should have at least one prediction")
+        if let basePredictions = basePredictions {
+            XCTAssertGreaterThan(basePredictions.count, 0, "Should have at least one prediction")
             
-            // Verify these are RFClassificationPrediction objects
-            for prediction in predictions {
-                XCTAssertTrue(prediction is RFClassificationPrediction, "Should be RFClassificationPrediction object")
+            // Verify these can be cast to RFClassificationPrediction objects
+            for basePrediction in basePredictions {
+                guard let prediction = basePrediction as? RFClassificationPrediction else {
+                    XCTFail("Prediction should be of type RFClassificationPrediction")
+                    continue
+                }
+                
                 XCTAssertFalse(prediction.className.isEmpty, "Class name should not be empty")
                 XCTAssertGreaterThanOrEqual(prediction.confidence, 0.0, "Confidence should be >= 0")
                 XCTAssertLessThanOrEqual(prediction.confidence, 1.0, "Confidence should be <= 1")
             }
             
-            print("ResNet Detection Results:")
-            for (index, prediction) in predictions.prefix(3).enumerated() {
-                print("  \(index + 1). \(prediction.className) - \(String(format: "%.3f", prediction.confidence))")
+            // Verify meaningful results  
+            if let topBasePrediction = basePredictions.first,
+               let topPrediction = topBasePrediction as? RFClassificationPrediction {
+                XCTAssertGreaterThan(topPrediction.confidence, 0.1, "Top prediction should have reasonable confidence")
             }
         }
     }
@@ -319,11 +321,10 @@ final class LoadModel: XCTestCase {
                 }
             }
             
-            print("ResNet Generic Detection Results:")
-            for (index, prediction) in predictions.prefix(3).enumerated() {
-                if let classificationPrediction = prediction as? RFClassificationPrediction {
-                    print("  \(index + 1). \(classificationPrediction.className) - \(String(format: "%.3f", classificationPrediction.confidence))")
-                }
+            // Verify meaningful results
+            if let firstPrediction = predictions.first,
+               let classificationPrediction = firstPrediction as? RFClassificationPrediction {
+                XCTAssertGreaterThan(classificationPrediction.confidence, 0.1, "Top prediction should have reasonable confidence")
             }
         }
     }
@@ -349,40 +350,33 @@ final class LoadModel: XCTestCase {
             return
         }
         
-        // Test classify method with UIImage
-        let (predictions, inferenceError) = await classificationModel.classify(image: image)
+        // Test detect method with UIImage
+        let (basePredictions, inferenceError) = await classificationModel.detect(image: image)
         
         XCTAssertNil(inferenceError, "UIImage classification inference failed: \(inferenceError?.localizedDescription ?? "unknown error")")
-        XCTAssertNotNil(predictions, "Predictions should not be nil")
+        XCTAssertNotNil(basePredictions, "Predictions should not be nil")
         
-        if let predictions = predictions {
-            XCTAssertGreaterThan(predictions.count, 0, "Should have at least one prediction")
+        if let basePredictions = basePredictions {
+            XCTAssertGreaterThan(basePredictions.count, 0, "Should have at least one prediction")
             
-            // Test RFClassificationPrediction properties
-            for prediction in predictions {
+            // Test RFClassificationPrediction properties by casting
+            for basePrediction in basePredictions {
+                guard let prediction = basePrediction as? RFClassificationPrediction else {
+                    XCTFail("Prediction should be of type RFClassificationPrediction")
+                    continue
+                }
+                
                 XCTAssertFalse(prediction.className.isEmpty, "Class name should not be empty")
                 XCTAssertGreaterThanOrEqual(prediction.confidence, 0.0, "Confidence should be >= 0")
                 XCTAssertLessThanOrEqual(prediction.confidence, 1.0, "Confidence should be <= 1")
                 XCTAssertGreaterThanOrEqual(prediction.classIndex, 0, "Class index should be >= 0")
             }
             
-            print("ResNet UIImage Classification Results:")
-            for (index, prediction) in predictions.prefix(3).enumerated() {
-                print("  \(index + 1). \(prediction.className) - \(String(format: "%.3f", prediction.confidence))")
+            // Verify meaningful results
+            if let topBasePrediction = basePredictions.first,
+               let topPrediction = topBasePrediction as? RFClassificationPrediction {
+                XCTAssertGreaterThan(topPrediction.confidence, 0.1, "Top prediction should have reasonable confidence")
             }
-        }
-        
-        // Test detect method with UIImage
-        let (detectPredictions, detectError) = await classificationModel.detect(image: image)
-        
-        XCTAssertNil(detectError, "UIImage detect inference failed")
-        XCTAssertNotNil(detectPredictions, "Detect predictions should not be nil")
-        
-        if let detectPredictions = detectPredictions {
-            XCTAssertGreaterThan(detectPredictions.count, 0, "Should have at least one detect prediction")
-            
-            // Verify results are consistent between classify and detect methods
-            XCTAssertEqual(predictions?.count, detectPredictions.count, "Classify and detect should return same number of predictions")
         }
     }
     #endif
