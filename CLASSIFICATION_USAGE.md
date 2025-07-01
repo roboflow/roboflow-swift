@@ -29,8 +29,12 @@ The main classification model class:
 - Extends `RFModel` to handle classification tasks
 - Supports both local models and Roboflow API models
 - Compatible with ResNet and other classification architectures
-- Returns `RFClassificationPrediction` objects from `classify()` methods
-- Returns `RFPrediction` objects from generic `detect()` methods (can be cast to `RFClassificationPrediction`)
+
+**Method Return Types:**
+- `classify()` methods → `[RFClassificationPrediction]?` - Direct classification results
+- `detect()` methods → `[RFClassificationPrediction]?` - Same as classify, for consistency
+- `detect()` override → `[RFObjectDetectionPrediction]?` - For base class compatibility
+- `detect()` async → `[RFPrediction]?` - Generic predictions (castable to `RFClassificationPrediction`)
 
 ## Installation
 
@@ -68,6 +72,9 @@ classificationModel.configure(threshold: 0.3, overlap: 0.0, maxObjects: 0)
 
 #### Using Async/Await
 
+There are two main methods to get `RFClassificationPrediction` objects:
+
+**Option 1: Using classify() method**
 ```swift
 func classifyImage() async {
     guard let image = UIImage(named: "your_image.jpg") else { return }
@@ -104,8 +111,36 @@ func classifyImage() async {
 }
 ```
 
+**Option 2: Using detect() method**
+```swift
+func detectClassifications() async {
+    guard let image = UIImage(named: "your_image.jpg") else { return }
+    
+    // Use detect() method - also returns RFClassificationPrediction objects directly
+    let (predictions, error) = await classificationModel.detect(image: image)
+    
+    if let error = error {
+        print("Detection error: \(error)")
+        return
+    }
+    
+    guard let predictions = predictions else {
+        print("No predictions returned")
+        return
+    }
+    
+    // Same RFClassificationPrediction objects as classify() method
+    for prediction in predictions {
+        print("Class: \(prediction.className)")
+        print("Confidence: \(String(format: "%.3f", prediction.confidence))")
+        print("Class Index: \(prediction.classIndex)")
+    }
+}
+```
+
 #### Using Completion Handlers
 
+**Option 1: Using classify() method**
 ```swift
 func classifyImageWithCallback() {
     guard let image = UIImage(named: "your_image.jpg") else { return }
@@ -123,6 +158,33 @@ func classifyImageWithCallback() {
         }
         
         // Work with RFClassificationPrediction objects
+        for prediction in predictions {
+            print("Class: \(prediction.className)")
+            print("Confidence: \(String(format: "%.3f", prediction.confidence))")
+            print("Class Index: \(prediction.classIndex)")
+        }
+    }
+}
+```
+
+**Option 2: Using detect() method**
+```swift
+func detectClassificationsWithCallback() {
+    guard let image = UIImage(named: "your_image.jpg") else { return }
+    
+    // Use detect() method - also returns RFClassificationPrediction objects
+    classificationModel.detect(image: image) { predictions, error in
+        if let error = error {
+            print("Detection error: \(error)")
+            return
+        }
+        
+        guard let predictions = predictions else {
+            print("No predictions returned")
+            return
+        }
+        
+        // Same RFClassificationPrediction objects as classify() method
         for prediction in predictions {
             print("Class: \(prediction.className)")
             print("Confidence: \(String(format: "%.3f", prediction.confidence))")

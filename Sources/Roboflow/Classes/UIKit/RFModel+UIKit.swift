@@ -73,6 +73,20 @@ extension RFModel {
 }
 
 extension RFClassificationModel {
+    /// Run image through classification model and return RFClassificationPrediction objects
+    public func detect(image: UIImage, completion: @escaping (([RFClassificationPrediction]?, Error?) -> Void)) {
+        classify(image: image, completion: completion)
+    }
+    
+    public func detect(image: UIImage) async -> ([RFClassificationPrediction]?, Error?) {
+        if #available(macOS 10.15, *) {
+            return await classify(image: image)
+        } else {
+            // Fallback on earlier versions
+            return (nil, UnsupportedOSError())
+        }
+    }
+    
     /// Run image through classification model and return predictions
     public func classify(image: UIImage, completion: @escaping (([RFClassificationPrediction]?, Error?) -> Void)) {
         let size = image.size

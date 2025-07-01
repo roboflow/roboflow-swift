@@ -40,7 +40,7 @@ class ResNetClassificationExample {
             return
         }
         
-        // Perform classification using async/await - returns RFClassificationPrediction objects
+        // Option 1: Use classify() method - returns RFClassificationPrediction objects
         Task {
             let (predictions, error) = await classificationModel.classify(image: image)
             
@@ -69,9 +69,31 @@ class ResNetClassificationExample {
                 print("🏆 Top prediction: \(topPrediction.className) with confidence \(String(format: "%.3f", topPrediction.confidence))")
             }
             
-            // Filter predictions above a certain threshold
-            let highConfidencePredictions = predictions.filter { $0.confidence > 0.7 }
-            print("High confidence predictions (>70%): \(highConfidencePredictions.count)")
+                         // Filter predictions above a certain threshold
+             let highConfidencePredictions = predictions.filter { $0.confidence > 0.7 }
+             print("High confidence predictions (>70%): \(highConfidencePredictions.count)")
+        }
+        
+        // Option 2: Use detect() method - also returns RFClassificationPrediction objects
+        Task {
+            let (predictions, error) = await classificationModel.detect(image: image)
+            
+            if let error = error {
+                print("Detection error: \(error)")
+                return
+            }
+            
+            guard let predictions = predictions else {
+                print("No predictions returned")
+                return
+            }
+            
+            print("Detection method results (RFClassificationPrediction objects):")
+            for prediction in predictions {
+                print("Class: \(prediction.className)")
+                print("Confidence: \(String(format: "%.3f", prediction.confidence))")
+                print("Class Index: \(prediction.classIndex)")
+            }
         }
     }
     

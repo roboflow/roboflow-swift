@@ -78,10 +78,10 @@ public class RFClassificationModel: RFModel {
         return nil
     }
     
-    //Run image through model and return Classification predictions (converted to detection format for compatibility)
+    //Run image through model and return Classification predictions as Object Detection predictions for compatibility
     public override func detect(pixelBuffer buffer: CVPixelBuffer, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
         classify(pixelBuffer: buffer) { [weak self] predictions, error in
-            // Convert classification predictions to object detection predictions for compatibility
+            // Convert classification predictions to object detection predictions for compatibility with base class
             let objectDetectionPredictions = predictions?.map { prediction in
                 // Create a full-image bounding box for classification results
                 let box = CGRect(x: 0, y: 0, width: Int(buffer.width()), height: Int(buffer.height()))
@@ -98,6 +98,11 @@ public class RFClassificationModel: RFModel {
             }
             completion(objectDetectionPredictions, error)
         }
+    }
+    
+    //Run image through model and return Classification predictions directly
+    public func detect(pixelBuffer buffer: CVPixelBuffer, completion: @escaping (([RFClassificationPrediction]?, Error?) -> Void)) {
+        classify(pixelBuffer: buffer, completion: completion)
     }
     
     //Async version that returns RFClassificationPrediction objects as RFPrediction
