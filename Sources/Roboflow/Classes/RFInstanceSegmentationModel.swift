@@ -52,7 +52,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
     }
     
     //Run image through model and return Detections
-    public override func detect(pixelBuffer:CVPixelBuffer, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
+    public override func detect(pixelBuffer:CVPixelBuffer, completion: @escaping (([RFPrediction]?, Error?) -> Void)) {
         let imgHeight = CGFloat(pixelBuffer.height())
         let imgWidth = CGFloat(pixelBuffer.width())
         

@@ -36,6 +36,9 @@ public class RoboflowMobile: NSObject {
         if (modelType.contains("seg")) {
             return RFInstanceSegmentationModel()
         }
+        if (modelType.contains("classification") || modelType.contains("resnet")) {
+            return RFClassificationModel()
+        }
         return RFObjectDetectionModel()
     }
     

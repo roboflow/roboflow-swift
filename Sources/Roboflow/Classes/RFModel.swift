@@ -35,7 +35,7 @@ public class RFModel: NSObject {
         return nil
     }
     
-    public func detect(pixelBuffer: CVPixelBuffer, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
+    public func detect(pixelBuffer: CVPixelBuffer, completion: @escaping (([RFPrediction]?, Error?) -> Void)) {
     }
  
     public func detect(pixelBuffer: CVPixelBuffer) async -> ([RFPrediction]?, Error?) {

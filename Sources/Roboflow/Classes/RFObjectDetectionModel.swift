@@ -74,7 +74,7 @@ public class RFObjectDetectionModel: RFModel {
     
     //Run image through model and return Detections
     @available(*, renamed: "detect(image:)")
-    public override func detect(pixelBuffer buffer: CVPixelBuffer, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
+    public override func detect(pixelBuffer buffer: CVPixelBuffer, completion: @escaping (([RFPrediction]?, Error?) -> Void)) {
         guard let coreMLRequest = self.coreMLRequest else {
             completion(nil, "Model initialization failed.")
             return

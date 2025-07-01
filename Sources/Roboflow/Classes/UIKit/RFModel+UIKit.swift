@@ -71,7 +71,6 @@ extension RFModel {
         }
     }
 }
-
 #endif
 
 func hexStringToCGColor (hex:String) -> CGColor {
