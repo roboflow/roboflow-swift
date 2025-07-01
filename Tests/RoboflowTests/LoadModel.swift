@@ -30,26 +30,16 @@ final class LoadModel: XCTestCase {
         // Put teardown code here. This method is called after the invocation of each test method in the class.
     }
     
-    // Helper function to download ResNet model from Google Drive
-    private func downloadResNetModel() async -> URL? {
-        let googleDriveURL = "https://drive.google.com/uc?export=download&id=1Vv2ffh8HF7abZCYhoJcEUyfXi1GwygZC"
+    // Helper function to get ResNet model path from assets directory
+    private func getResNetModelPath() -> URL? {
+        let modelPath = "Tests/assets/ResNet.mlmodelc"
+        let modelURL = URL(fileURLWithPath: modelPath)
         
-        guard let url = URL(string: googleDriveURL) else {
-            XCTFail("Invalid Google Drive URL")
-            return nil
-        }
-        
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            
-            // Save to temporary directory
-            let tempDirectory = FileManager.default.temporaryDirectory
-            let modelURL = tempDirectory.appendingPathComponent("ResNet.mlmodelc")
-            
-            try data.write(to: modelURL)
+        // Check if model file exists
+        if FileManager.default.fileExists(atPath: modelURL.path) {
             return modelURL
-        } catch {
-            XCTFail("Failed to download ResNet model: \(error)")
+        } else {
+            XCTFail("ResNet model not found at \(modelPath). Please add ResNet.mlmodelc to the Tests/assets/ directory.")
             return nil
         }
     }
@@ -178,8 +168,8 @@ final class LoadModel: XCTestCase {
     // MARK: - ResNet Classification Tests
     
     func testLoadResNetModel() async {
-        guard let modelURL = await downloadResNetModel() else {
-            XCTFail("Failed to download ResNet model")
+        guard let modelURL = getResNetModelPath() else {
+            XCTFail("Failed to get ResNet model path")
             return
         }
         
@@ -196,8 +186,8 @@ final class LoadModel: XCTestCase {
     }
     
     func testResNetClassificationInference() async {
-        guard let modelURL = await downloadResNetModel() else {
-            XCTFail("Failed to download ResNet model")
+        guard let modelURL = getResNetModelPath() else {
+            XCTFail("Failed to get ResNet model path")
             return
         }
         
@@ -246,8 +236,8 @@ final class LoadModel: XCTestCase {
     }
     
     func testResNetDetectMethod() async {
-        guard let modelURL = await downloadResNetModel() else {
-            XCTFail("Failed to download ResNet model")
+        guard let modelURL = getResNetModelPath() else {
+            XCTFail("Failed to get ResNet model path")
             return
         }
         
@@ -290,8 +280,8 @@ final class LoadModel: XCTestCase {
     }
     
     func testResNetGenericDetectMethod() async {
-        guard let modelURL = await downloadResNetModel() else {
-            XCTFail("Failed to download ResNet model")
+        guard let modelURL = getResNetModelPath() else {
+            XCTFail("Failed to get ResNet model path")
             return
         }
         
@@ -337,4 +327,63 @@ final class LoadModel: XCTestCase {
             }
         }
     }
+    
+    #if canImport(UIKit)
+    func testResNetUIImageClassification() async {
+        guard let modelURL = getResNetModelPath() else {
+            XCTFail("Failed to get ResNet model path")
+            return
+        }
+        
+        let classificationModel = RFClassificationModel()
+        let loadError = classificationModel.loadLocalModel(modelPath: modelURL)
+        
+        XCTAssertNil(loadError, "Failed to load ResNet model")
+        
+        // Configure the model
+        classificationModel.configure(threshold: 0.01, overlap: 0.0, maxObjects: 0)
+        
+        // Load UIImage from test assets
+        guard let image = loadUIImage(from: "Tests/assets/hard-hat.jpeg") else {
+            XCTFail("Failed to load test image as UIImage")
+            return
+        }
+        
+        // Test classify method with UIImage
+        let (predictions, inferenceError) = await classificationModel.classify(image: image)
+        
+        XCTAssertNil(inferenceError, "UIImage classification inference failed: \(inferenceError?.localizedDescription ?? "unknown error")")
+        XCTAssertNotNil(predictions, "Predictions should not be nil")
+        
+        if let predictions = predictions {
+            XCTAssertGreaterThan(predictions.count, 0, "Should have at least one prediction")
+            
+            // Test RFClassificationPrediction properties
+            for prediction in predictions {
+                XCTAssertFalse(prediction.className.isEmpty, "Class name should not be empty")
+                XCTAssertGreaterThanOrEqual(prediction.confidence, 0.0, "Confidence should be >= 0")
+                XCTAssertLessThanOrEqual(prediction.confidence, 1.0, "Confidence should be <= 1")
+                XCTAssertGreaterThanOrEqual(prediction.classIndex, 0, "Class index should be >= 0")
+            }
+            
+            print("ResNet UIImage Classification Results:")
+            for (index, prediction) in predictions.prefix(3).enumerated() {
+                print("  \(index + 1). \(prediction.className) - \(String(format: "%.3f", prediction.confidence))")
+            }
+        }
+        
+        // Test detect method with UIImage
+        let (detectPredictions, detectError) = await classificationModel.detect(image: image)
+        
+        XCTAssertNil(detectError, "UIImage detect inference failed")
+        XCTAssertNotNil(detectPredictions, "Detect predictions should not be nil")
+        
+        if let detectPredictions = detectPredictions {
+            XCTAssertGreaterThan(detectPredictions.count, 0, "Should have at least one detect prediction")
+            
+            // Verify results are consistent between classify and detect methods
+            XCTAssertEqual(predictions?.count, detectPredictions.count, "Classify and detect should return same number of predictions")
+        }
+    }
+    #endif
 }
