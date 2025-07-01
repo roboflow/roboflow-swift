@@ -10,12 +10,17 @@ import Roboflow
 import CoreVideo
 import CoreGraphics
 import ImageIO
+import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // cash counter api_key (already public)
 var API_KEY = "fEto4us79wdzRJ2jkO6U"
 
 final class LoadModel: XCTestCase {
     var model: RFModel?
+    var classificationModel: RFClassificationModel?
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
@@ -23,6 +28,30 @@ final class LoadModel: XCTestCase {
 
     override func tearDownWithError() throws {
         // Put teardown code here. This method is called after the invocation of each test method in the class.
+    }
+    
+    // Helper function to download ResNet model from Google Drive
+    private func downloadResNetModel() async -> URL? {
+        let googleDriveURL = "https://drive.google.com/uc?export=download&id=1Vv2ffh8HF7abZCYhoJcEUyfXi1GwygZC"
+        
+        guard let url = URL(string: googleDriveURL) else {
+            XCTFail("Invalid Google Drive URL")
+            return nil
+        }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            
+            // Save to temporary directory
+            let tempDirectory = FileManager.default.temporaryDirectory
+            let modelURL = tempDirectory.appendingPathComponent("ResNet.mlmodelc")
+            
+            try data.write(to: modelURL)
+            return modelURL
+        } catch {
+            XCTFail("Failed to download ResNet model: \(error)")
+            return nil
+        }
     }
 
     // Helper function to load image and convert to CVPixelBuffer
@@ -80,6 +109,13 @@ final class LoadModel: XCTestCase {
         
         return buffer
     }
+    
+    #if canImport(UIKit)
+    // Helper function to load UIImage for UIKit tests
+    private func loadUIImage(from imagePath: String) -> UIImage? {
+        return UIImage(contentsOfFile: imagePath)
+    }
+    #endif
 
     func testLoadModel() async {
         let rf = RoboflowMobile(apiKey: API_KEY)
@@ -137,5 +173,168 @@ final class LoadModel: XCTestCase {
         // Note: predictions might be nil if no objects are detected in the test image, which is expected
         XCTAssertNotNil(results)
         XCTAssert(results?.count ?? 0 > 0)
+    }
+    
+    // MARK: - ResNet Classification Tests
+    
+    func testLoadResNetModel() async {
+        guard let modelURL = await downloadResNetModel() else {
+            XCTFail("Failed to download ResNet model")
+            return
+        }
+        
+        let classificationModel = RFClassificationModel()
+        let error = classificationModel.loadLocalModel(modelPath: modelURL)
+        
+        XCTAssertNil(error, "Failed to load ResNet model: \(error?.localizedDescription ?? "unknown error")")
+        XCTAssertNotNil(classificationModel)
+        
+        // Configure the model
+        classificationModel.configure(threshold: 0.1, overlap: 0.0, maxObjects: 0)
+        
+        self.classificationModel = classificationModel
+    }
+    
+    func testResNetClassificationInference() async {
+        guard let modelURL = await downloadResNetModel() else {
+            XCTFail("Failed to download ResNet model")
+            return
+        }
+        
+        let classificationModel = RFClassificationModel()
+        let loadError = classificationModel.loadLocalModel(modelPath: modelURL)
+        
+        XCTAssertNil(loadError, "Failed to load ResNet model")
+        
+        // Configure the model with low threshold to get more predictions
+        classificationModel.configure(threshold: 0.01, overlap: 0.0, maxObjects: 0)
+        
+        // Use existing test image
+        guard let buffer = loadImageAsPixelBuffer(from: "Tests/assets/hard-hat.jpeg") else {
+            XCTFail("Failed to load test image")
+            return
+        }
+        
+        // Test classify method with CVPixelBuffer
+        let (predictions, inferenceError) = await classificationModel.classify(pixelBuffer: buffer)
+        
+        XCTAssertNil(inferenceError, "Classification inference failed: \(inferenceError?.localizedDescription ?? "unknown error")")
+        XCTAssertNotNil(predictions, "Predictions should not be nil")
+        
+        if let predictions = predictions {
+            XCTAssertGreaterThan(predictions.count, 0, "Should have at least one prediction")
+            
+            // Test RFClassificationPrediction properties
+            for prediction in predictions {
+                XCTAssertFalse(prediction.className.isEmpty, "Class name should not be empty")
+                XCTAssertGreaterThanOrEqual(prediction.confidence, 0.0, "Confidence should be >= 0")
+                XCTAssertLessThanOrEqual(prediction.confidence, 1.0, "Confidence should be <= 1")
+                XCTAssertGreaterThanOrEqual(prediction.classIndex, 0, "Class index should be >= 0")
+                
+                // Test getValues() method
+                let values = prediction.getValues()
+                XCTAssertNotNil(values["class"])
+                XCTAssertNotNil(values["confidence"])
+                XCTAssertNotNil(values["classIndex"])
+            }
+            
+            print("ResNet Classification Results:")
+            for (index, prediction) in predictions.prefix(5).enumerated() {
+                print("  \(index + 1). \(prediction.className) - \(String(format: "%.3f", prediction.confidence))")
+            }
+        }
+    }
+    
+    func testResNetDetectMethod() async {
+        guard let modelURL = await downloadResNetModel() else {
+            XCTFail("Failed to download ResNet model")
+            return
+        }
+        
+        let classificationModel = RFClassificationModel()
+        let loadError = classificationModel.loadLocalModel(modelPath: modelURL)
+        
+        XCTAssertNil(loadError, "Failed to load ResNet model")
+        
+        // Configure the model
+        classificationModel.configure(threshold: 0.01, overlap: 0.0, maxObjects: 0)
+        
+        // Use existing test image
+        guard let buffer = loadImageAsPixelBuffer(from: "Tests/assets/cap.jpg") else {
+            XCTFail("Failed to load test image")
+            return
+        }
+        
+        // Test detect method that returns RFClassificationPrediction objects
+        let (predictions, inferenceError) = await classificationModel.detect(pixelBuffer: buffer)
+        
+        XCTAssertNil(inferenceError, "Detection inference failed: \(inferenceError?.localizedDescription ?? "unknown error")")
+        XCTAssertNotNil(predictions, "Predictions should not be nil")
+        
+        if let predictions = predictions {
+            XCTAssertGreaterThan(predictions.count, 0, "Should have at least one prediction")
+            
+            // Verify these are RFClassificationPrediction objects
+            for prediction in predictions {
+                XCTAssertTrue(prediction is RFClassificationPrediction, "Should be RFClassificationPrediction object")
+                XCTAssertFalse(prediction.className.isEmpty, "Class name should not be empty")
+                XCTAssertGreaterThanOrEqual(prediction.confidence, 0.0, "Confidence should be >= 0")
+                XCTAssertLessThanOrEqual(prediction.confidence, 1.0, "Confidence should be <= 1")
+            }
+            
+            print("ResNet Detection Results:")
+            for (index, prediction) in predictions.prefix(3).enumerated() {
+                print("  \(index + 1). \(prediction.className) - \(String(format: "%.3f", prediction.confidence))")
+            }
+        }
+    }
+    
+    func testResNetGenericDetectMethod() async {
+        guard let modelURL = await downloadResNetModel() else {
+            XCTFail("Failed to download ResNet model")
+            return
+        }
+        
+        let classificationModel = RFClassificationModel()
+        let loadError = classificationModel.loadLocalModel(modelPath: modelURL)
+        
+        XCTAssertNil(loadError, "Failed to load ResNet model")
+        
+        // Configure the model
+        classificationModel.configure(threshold: 0.01, overlap: 0.0, maxObjects: 0)
+        
+        // Use existing test image
+        guard let buffer = loadImageAsPixelBuffer(from: "Tests/assets/hard-hat.jpeg") else {
+            XCTFail("Failed to load test image")
+            return
+        }
+        
+        // Test generic detect method that returns RFPrediction objects
+        let (predictions, inferenceError) = await (classificationModel as RFModel).detect(pixelBuffer: buffer)
+        
+        XCTAssertNil(inferenceError, "Generic detection inference failed: \(inferenceError?.localizedDescription ?? "unknown error")")
+        XCTAssertNotNil(predictions, "Predictions should not be nil")
+        
+        if let predictions = predictions {
+            XCTAssertGreaterThan(predictions.count, 0, "Should have at least one prediction")
+            
+            // Verify these can be cast to RFClassificationPrediction
+            for prediction in predictions {
+                if let classificationPrediction = prediction as? RFClassificationPrediction {
+                    XCTAssertFalse(classificationPrediction.className.isEmpty, "Class name should not be empty")
+                    XCTAssertGreaterThanOrEqual(classificationPrediction.confidence, 0.0, "Confidence should be >= 0")
+                    XCTAssertLessThanOrEqual(classificationPrediction.confidence, 1.0, "Confidence should be <= 1")
+                } else {
+                    XCTFail("Prediction should be castable to RFClassificationPrediction")
+                }
+            }
+            
+            print("ResNet Generic Detection Results:")
+            for (index, prediction) in predictions.prefix(3).enumerated() {
+                if let classificationPrediction = prediction as? RFClassificationPrediction {
+                    print("  \(index + 1). \(classificationPrediction.className) - \(String(format: "%.3f", classificationPrediction.confidence))")
+                }
+            }
+        }
     }
 }
