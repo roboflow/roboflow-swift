@@ -67,21 +67,12 @@ jobs:
       run: swift package resolve
       
     - name: Build Swift package
-      run: |
-        # Build with appropriate SDK
-        swift build -v \
-          -Xswiftc -sdk \
-          -Xswiftc $(xcrun --sdk macosx --show-sdk-path)
-      env:
-        SWIFT_STRICT_CONCURRENCY: "complete"
-        
+      run:
+        swift build
+  
     - name: Run Swift package tests
       run: |
-        swift test -v \
-          -Xswiftc -sdk \
-          -Xswiftc $(xcrun --sdk macosx --show-sdk-path)
-      env:
-        SWIFT_STRICT_CONCURRENCY: "complete"
+        swift test
         
     - name: Validate package structure
       run: swift package describe
