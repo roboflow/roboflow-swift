@@ -86,7 +86,7 @@ public class RoboflowMobile: NSObject {
             }
         } else {
             print("Error Loading Model. Check your API_KEY, project name, and version along with your network connection.")
-            completion(nil, , "", "")
+            completion(nil, ModelLoadError(), "", "")
         }
     }
 
