@@ -93,19 +93,18 @@ public class RFClassificationModel: RFModel {
     //Run image through model and return Classification predictions
     public override func detect(pixelBuffer buffer: CVPixelBuffer, completion: @escaping (([RFPrediction]?, Error?) -> Void)) {
         guard let mlModel = self.mlModel else {
-            completion(nil, "Model initialization failed.")
+            completion(nil, NSError(domain: "RFClassificationModel", code: 1, userInfo: [NSLocalizedDescriptionKey: "Model initialization failed."]))
             return
         }
-        
-
         
         do {
             // Get the actual input name from model description
             guard let inputName = mlModel.modelDescription.inputDescriptionsByName.keys.first,
-                  let inputDescription = mlModel.modelDescription.inputDescriptionsByName[inputName] else {
-                completion(nil, "Could not find model input name")
+                let inputDescription = mlModel.modelDescription.inputDescriptionsByName[inputName] else {
+                completion(nil, NSError(domain: "RFClassificationModel", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not find model input name"]))
                 return
             }
+            
             
             // Get expected image dimensions
             let inputImage: MLFeatureValue
@@ -130,54 +129,61 @@ public class RFClassificationModel: RFModel {
             // Get the actual output name from model description
             guard let outputName = mlModel.modelDescription.outputDescriptionsByName.keys.first,
                   let output = prediction.featureValue(for: outputName) else {
-                completion(nil, "Could not find model output")
+                completion(nil, NSError(domain: "RFClassificationModel", code: 3, userInfo: [NSLocalizedDescriptionKey: "Could not find model output"]))
                 return
             }
             
             var predictions: [RFPrediction] = []
             
             // Handle different output types
-            if output.type == .dictionary, let probDict = output.dictionaryValue as? [String: NSNumber] {
-                // Dictionary output (class name -> probability)
-                for (className, probValue) in probDict {
-                    let confidence = probValue.floatValue
-                    if confidence >= Float(threshold) {
-                        let prediction = RFClassificationPrediction(
-                            className: className,
-                            confidence: confidence,
-                            classIndex: 0 // Index not available in dictionary output
-                        )
-                        predictions.append(prediction)
+            if let multiArray = output.multiArrayValue {
+                // Multi-array output (may be logits that need softmax conversion)
+                let rawValues = multiArray.dataPointer.bindMemory(to: Float.self, capacity: multiArray.count)
+                
+                // Check if values are logits (outside 0-1 range) and need softmax
+                var needsSoftmax = false
+                for i in 0..<multiArray.count {
+                    if rawValues[i] < 0.0 || rawValues[i] > 1.0 {
+                        needsSoftmax = true
+                        break
                     }
                 }
-            } else if let multiArray = output.multiArrayValue {
-                // Multi-array output (probabilities from model)
-                let probabilities = multiArray.dataPointer.bindMemory(to: Float.self, capacity: multiArray.count)
+                
+                let probabilities: [Float]
+                if needsSoftmax {
+                    // Apply softmax to convert logits to probabilities
+                    probabilities = applySoftmax(logits: rawValues, count: multiArray.count)
+                } else {
+                    // Values are already probabilities
+                    probabilities = Array(UnsafeBufferPointer(start: rawValues, count: multiArray.count))
+                }
                 
                 for i in 0..<multiArray.count {
                     let confidence = probabilities[i]
                     if confidence >= Float(threshold) {
                         let prediction = RFClassificationPrediction(
-                            className: "class_\(i)", // Generic class name
+                            className: self.classes[i], // Generic class name
                             confidence: confidence,
-                            classIndex: i
+                            classId: i
                         )
                         predictions.append(prediction)
                     }
                 }
+            } else {
+                // Unknown output type - log and continue with empty predictions
+                print("Unknown output type: \(output.type)")
             }
             
             // Sort by confidence (highest first) - cast to RFClassificationPrediction since that's what we create
             predictions.sort { 
                 guard let pred1 = $0 as? RFClassificationPrediction, 
-                      let pred2 = $1 as? RFClassificationPrediction else { 
+                    let pred2 = $1 as? RFClassificationPrediction else { 
                     return false 
                 }
                 return pred1.confidence > pred2.confidence
             }
             
             completion(predictions, nil)
-            
         } catch let error {
             completion(nil, error)
         }
@@ -248,6 +254,32 @@ public class RFClassificationModel: RFModel {
         CVPixelBufferUnlockBaseAddress(pixelBuffer, CVPixelBufferLockFlags.readOnly)
         
         return buffer
+    }
+    
+    // Helper function to apply softmax to logits
+    private func applySoftmax(logits: UnsafePointer<Float>, count: Int) -> [Float] {
+        // Find the maximum value for numerical stability
+        var maxValue: Float = -Float.infinity
+        for i in 0..<count {
+            maxValue = max(maxValue, logits[i])
+        }
+        
+        // Calculate exp(logit - max) and sum
+        var expValues: [Float] = []
+        var sumExp: Float = 0.0
+        for i in 0..<count {
+            let expValue = expf(logits[i] - maxValue)
+            expValues.append(expValue)
+            sumExp += expValue
+        }
+        
+        // Normalize to get probabilities
+        var probabilities: [Float] = []
+        for expValue in expValues {
+            probabilities.append(expValue / sumExp)
+        }
+        
+        return probabilities
     }
 
 }

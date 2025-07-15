@@ -14,11 +14,13 @@ public class RoboflowMobile: NSObject {
     var apiKey: String!
     var deviceID: String!
     private var retries = 2
-    
+    private var apiURL: String!
+
     //Initalize the SDK with the user's authorization key
-    public init (apiKey: String) {
+    public init (apiKey: String, apiURL: String = "https://api.roboflow.com") {
         super.init()
         self.apiKey = apiKey
+        self.apiURL = apiURL
         
         //Generate a unique device ID
         if #available(macOS 12.0, *) {
@@ -36,7 +38,7 @@ public class RoboflowMobile: NSObject {
         if (modelType.contains("seg")) {
             return RFInstanceSegmentationModel()
         }
-        if (modelType.contains("classification") || modelType.contains("resnet")) {
+        if (modelType.contains("vit") || modelType.contains("resnet")) {
             return RFClassificationModel()
         }
         return RFObjectDetectionModel()
@@ -48,7 +50,7 @@ public class RoboflowMobile: NSObject {
         if let modelInfo = loadModelCache(modelName: model, modelVersion: modelVersion),
             let modelURL = modelInfo["compiledModelURL"] as? String,
             let colors = modelInfo["colors"] as? [String: String],
-           let classes = modelInfo["classes"] as? [String],
+            let classes = modelInfo["classes"] as? [String],
             let name = modelInfo["name"] as? String,
             let modelType = modelInfo["modelType"] as? String {
             
@@ -84,6 +86,7 @@ public class RoboflowMobile: NSObject {
             }
         } else {
             print("Error Loading Model. Check your API_KEY, project name, and version along with your network connection.")
+            completion(nil, UnsupportedOSError(), "", "")
         }
     }
 
@@ -106,7 +109,11 @@ public class RoboflowMobile: NSObject {
     }
     
     func getConfigData(modelName: String, modelVersion: Int, apiKey: String, deviceID: String, completion: @escaping (([String: Any]?, Error?) -> Void)) {
-        var request = URLRequest(url: URL(string: "https://api.roboflow.com/coreml/\(modelName)/\(String(modelVersion))?api_key=\(apiKey)&device=\(deviceID)&bundle=\(Bundle.main.bundleIdentifier ?? "nobundle")")!,timeoutInterval: Double.infinity)
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? "nobundle"
+        guard let apiURL = URL(string: self.apiURL) else {
+            return completion(nil, UnsupportedOSError())
+        }
+        var request = URLRequest(url: URL(string: "\(String(describing: apiURL))/coreml/\(modelName)/\(String(modelVersion))?api_key=\(apiKey)&device=\(deviceID)&bundle=\(bundleIdentifier)")!,timeoutInterval: Double.infinity)
         request.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpMethod = "GET"
         
@@ -157,8 +164,20 @@ public class RoboflowMobile: NSObject {
             }
             
             let colors = coreMLDict["colors"] as? [String: String]
-            let classes = coreMLDict["classes"] as? [String]
-            
+            var classes = coreMLDict["classes"] as? [String]
+
+            let environment = coreMLDict["environment"] as? String
+
+            // download json file at the url in `environment`
+            let environmentURL = URL(string: environment!)
+            let environmentData = try? Data(contentsOf: environmentURL!)
+            let environmentDict = try? JSONSerialization.jsonObject(with: environmentData!, options: []) as? [String: Any]
+
+            // get `"CLASS_LIST"` from the json
+            let classList = environmentDict?["CLASS_LIST"] as? [String]
+            if let classList = classList {
+                classes = classList
+            }
             
             //Download the model from the link in the API response
             self.downloadModelFile(modelName: "\(modelName)-\(modelVersion).mlmodel", modelVersion: modelVersion, modelURL: modelURL) { fetchedModel, error in
@@ -218,11 +237,22 @@ public class RoboflowMobile: NSObject {
     //Download the model link with the provided URL from the Roboflow API
     private func downloadModelFile(modelName: String, modelVersion: Int, modelURL: URL, completion: @escaping (URL?, Error?)->()) {
         
-        downloadModel(signedURL: modelURL) { url in
+        downloadModel(signedURL: modelURL) { url, originalURL in
             if url != nil {
                 do {
+                    var finalModelURL = url!
+                    
+                    // Check if the original URL or downloaded file indicates a zip file
+                    let isZipFile = originalURL?.pathExtension.lowercased() == "zip" || 
+                                  originalURL?.absoluteString.contains(".zip") == true
+                    
+                    if isZipFile {
+                        // Unzip the file and find the .mlmodel file
+                        finalModelURL = try self.unzipModelFile(zipURL: finalModelURL)
+                    }
+                    
                     //Compile the downloaded model
-                    let compiledModelURL = try MLModel.compileModel(at: url!)
+                    let compiledModelURL = try MLModel.compileModel(at: finalModelURL)
                     let documentsURL = try
                     FileManager.default.url(for: .documentDirectory,
                                             in: .userDomainMask,
@@ -243,14 +273,62 @@ public class RoboflowMobile: NSObject {
         }
     }
     
-    func downloadModel(signedURL: URL, completion: @escaping ((URL?) -> Void)) {
+    // Helper function to unzip a file and return the path to the .mlmodel file
+    private func unzipModelFile(zipURL: URL) throws -> URL {
+        let tempDirectory = FileManager.default.temporaryDirectory
+        let extractionDirectory = tempDirectory.appendingPathComponent(UUID().uuidString)
+        
+        // Create extraction directory
+        try FileManager.default.createDirectory(at: extractionDirectory, withIntermediateDirectories: true, attributes: nil)
+        
+        // Use NSTask/Process to unzip the file
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        process.arguments = ["-q", zipURL.path, "-d", "\(extractionDirectory.path)/weights.mlpackage"]
+        
+        try process.run()
+        process.waitUntilExit()
+        
+        if process.terminationStatus != 0 {
+            throw NSError(domain: "UnzipError", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: "Failed to unzip file"])
+        }
+        
+        // Find the .mlmodel file in the extracted directory
+        let contents = try FileManager.default.contentsOfDirectory(at: extractionDirectory, includingPropertiesForKeys: nil, options: [])
+        
+        for url in contents {
+            if url.pathExtension.lowercased() == "mlmodel" {
+                return url
+            }
+            // Also check for .mlpackage directories
+            if url.pathExtension.lowercased() == "mlpackage" {
+                return url
+            }
+        }
+        
+        // If no .mlmodel or .mlpackage found, search recursively
+        for url in contents {
+            if url.hasDirectoryPath {
+                let nestedContents = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil, options: [])
+                for nestedUrl in nestedContents {
+                    if nestedUrl.pathExtension.lowercased() == "mlmodel" || nestedUrl.pathExtension.lowercased() == "mlpackage" {
+                        return nestedUrl
+                    }
+                }
+            }
+        }
+        
+        throw NSError(domain: "UnzipError", code: 1, userInfo: [NSLocalizedDescriptionKey: "No .mlmodel or .mlpackage file found in the zip archive"])
+    }
+    
+    func downloadModel(signedURL: URL, completion: @escaping ((URL?, URL?) -> Void)) {
         let downloadTask = URLSession.shared.downloadTask(with: signedURL) {
             urlOrNil, responseOrNil, errorOrNil in
             guard let fileURL = urlOrNil else {
-                completion(nil)
+                completion(nil, nil)
                 return
             }
-            completion(fileURL)
+            completion(fileURL, signedURL)
         }
         downloadTask.resume()
     }

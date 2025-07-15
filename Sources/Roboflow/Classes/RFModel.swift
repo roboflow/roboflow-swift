@@ -36,6 +36,7 @@ public class RFModel: NSObject {
     }
     
     public func detect(pixelBuffer: CVPixelBuffer, completion: @escaping (([RFPrediction]?, Error?) -> Void)) {
+        completion(nil, NSError(domain: "RFModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "Error loading model"]))
     }
  
     public func detect(pixelBuffer: CVPixelBuffer) async -> ([RFPrediction]?, Error?) {

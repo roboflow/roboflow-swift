@@ -11,19 +11,19 @@ import CoreGraphics
 public class RFClassificationPrediction: RFPrediction {
     public let className: String
     public let confidence: Float
-    public let classIndex: Int
+    public let classId: Int
     
-    public init(className: String, confidence: Float, classIndex: Int) {
+    public init(className: String, confidence: Float, classId: Int) {
         self.className = className
         self.confidence = confidence
-        self.classIndex = classIndex
+        self.classId = classId
     }
     
     public override func getValues() -> [String: Any] {
         let result = [
             "confidence": Double(confidence),
             "class": className,
-            "classIndex": classIndex
+            "classId": classId
         ] as [String: Any]
         
         return result
