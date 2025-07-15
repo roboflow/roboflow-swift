@@ -41,6 +41,13 @@ public class RoboflowMobile: NSObject {
         if (modelType.contains("vit") || modelType.contains("resnet")) {
             return RFClassificationModel()
         }
+        if (modelType.contains("detr") || modelType.contains("rfdetr")) {
+            if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
+                return RFDetrObjectDetectionModel()
+            } else {
+                return RFObjectDetectionModel()
+            }
+        }
         return RFObjectDetectionModel()
     }
     
@@ -106,6 +113,45 @@ public class RoboflowMobile: NSObject {
             // Fallback on earlier versions
             return (nil, UnsupportedOSError(), "", "")
         }
+    }
+    
+    /// Load a local model file
+    /// - Parameters:
+    ///   - modelPath: URL path to the local model file (.mlpackage or .mlmodelc)
+    ///   - modelType: Type of model ("object-detection", "detr", "seg", "classification")
+    ///   - classes: Array of class names for the model
+    ///   - colors: Dictionary mapping class names to hex color strings
+    /// - Returns: Tuple containing the loaded model, any error, model name, and model type
+    public func loadLocal(modelPath: URL, modelType: String, classes: [String] = [], colors: [String: String] = [:]) -> (RFModel?, Error?, String, String) {
+        let modelObject = getModelClass(modelType: modelType)
+        
+        // Handle RFDetr models specifically
+        if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
+            if let detrModel = modelObject as? RFDetrObjectDetectionModel {
+                let error = detrModel.loadLocalRFDetrModel(modelPath: modelPath, colors: colors, classes: classes)
+                if let error = error {
+                    return (nil, error, "", modelType)
+                }
+                return (detrModel, nil, modelPath.lastPathComponent, modelType)
+            }
+        }
+        
+        // Handle classification models with loadLocalModel method
+        if let classificationModel = modelObject as? RFClassificationModel {
+            let error = classificationModel.loadLocalModel(modelPath: modelPath)
+            if let error = error {
+                return (nil, error, "", modelType)
+            }
+            return (classificationModel, nil, modelPath.lastPathComponent, modelType)
+        }
+        
+        // Handle other model types with the standard loadMLModel method
+        let error = modelObject.loadMLModel(modelPath: modelPath, colors: colors, classes: classes)
+        if let error = error {
+            return (nil, error, "", modelType)
+        }
+        
+        return (modelObject, nil, modelPath.lastPathComponent, modelType)
     }
     
     func getConfigData(modelName: String, modelVersion: Int, apiKey: String, deviceID: String, completion: @escaping (([String: Any]?, Error?) -> Void)) {
