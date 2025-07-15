@@ -11,7 +11,7 @@ public struct UnsupportedOSError: Error, LocalizedError, CustomStringConvertible
 
     // MARK: Initialiser
     public init(
-        message: String = "This feature is not available on the current operating system.",
+        message: String = "This feature is not available on the current operating system."
     ) {
         self.message     = message
     }
