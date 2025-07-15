@@ -67,12 +67,12 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
         do {
             try handler.perform([coreMLRequest])
             guard let detectResults = coreMLRequest.results else { return }
+
+            let castDetectResults0 = (detectResults[0] as! VNCoreMLFeatureValueObservation).featureValue.multiArrayValue!
+            let castDetectResults1 = (detectResults[1] as! VNCoreMLFeatureValueObservation).featureValue.multiArrayValue!
             
-            let predictions = detectResults[1] as! VNCoreMLFeatureValueObservation
-            let protos = detectResults[0] as! VNCoreMLFeatureValueObservation
-            
-            let pred = predictions.featureValue.multiArrayValue!
-            let proto = protos.featureValue.multiArrayValue!
+            let pred = castDetectResults0.shape.count == 3 ? castDetectResults0 : castDetectResults1
+            let proto = castDetectResults1.shape.count == 4 ? castDetectResults1 : castDetectResults0
             
             let numMasks = 32
             let numCls = self.colors.count
@@ -80,6 +80,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
             // --- flatten MLMultiArray to Swift [Float] for speed
             let p = pred.dataPointer.bindMemory(to: Float.self,
                                                 capacity: pred.count)
+                                                
             let preds = UnsafeBufferPointer(start: p, count: pred.count)
             let protoShape = (c:Int(truncating: proto.shape[1]),
                               h:Int(truncating: proto.shape[2]),
