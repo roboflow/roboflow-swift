@@ -86,7 +86,7 @@ public class RoboflowMobile: NSObject {
             }
         } else {
             print("Error Loading Model. Check your API_KEY, project name, and version along with your network connection.")
-            completion(nil, UnsupportedOSError(), "", "")
+            completion(nil, , "", "")
         }
     }
 
@@ -104,14 +104,14 @@ public class RoboflowMobile: NSObject {
             }
         } else {
             // Fallback on earlier versions
-            return (nil, UnsupportedOSError(), "", "")
+            return (nil, ModelLoadError(), "", "")
         }
     }
     
     func getConfigData(modelName: String, modelVersion: Int, apiKey: String, deviceID: String, completion: @escaping (([String: Any]?, Error?) -> Void)) {
         let bundleIdentifier = Bundle.main.bundleIdentifier ?? "nobundle"
         guard let apiURL = URL(string: self.apiURL) else {
-            return completion(nil, UnsupportedOSError())
+            return completion(nil, ModelLoadError())
         }
         var request = URLRequest(url: URL(string: "\(String(describing: apiURL))/coreml/\(modelName)/\(String(modelVersion))?api_key=\(apiKey)&device=\(deviceID)&bundle=\(bundleIdentifier)")!,timeoutInterval: Double.infinity)
         request.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
