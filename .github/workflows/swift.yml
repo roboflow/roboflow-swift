@@ -18,16 +18,7 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      
-    - name: Check available Xcode versions
-      run: |
-        echo "Available Xcode versions:"
-        ls -la /Applications | grep Xcode || echo "No Xcode installations found in /Applications"
-        echo "Current Xcode version:"
-        xcodebuild -version || echo "xcodebuild not found"
-        echo "Xcode path:"
-        xcode-select -p || echo "No Xcode selected"
-      
+
     - name: Setup Xcode
       uses: maxim-lobanov/setup-xcode@v1.6.0
       with:
