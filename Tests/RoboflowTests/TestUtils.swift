@@ -20,6 +20,69 @@ public let API_KEY = "rf_EsVTlbAbaZPLmAFuQwWoJgFpMU82" // cash counter api_key (
 public let BANANA_API_KEY = "rf_EsVTlbAbaZPLmAFuQwWoJgFpMU82" // banana ripeness staging api_key; classification models
 
 public class TestUtils {
+    // Helper function to get resource URL
+    private static func getResourceURL(for filename: String, withExtension ext: String) -> URL? {
+        // First try to get the test bundle for Swift Package Manager
+        var bundle: Bundle
+        
+        // Check if Bundle.module is available (Swift 5.3+)
+        if #available(macOS 10.15, iOS 13.0, *) {
+            #if SWIFT_PACKAGE && swift(>=5.3)
+            if let moduleBundle = Bundle.module as Bundle? {
+                bundle = moduleBundle
+            } else {
+                bundle = Bundle(for: TestUtils.self)
+            }
+            #else
+            bundle = Bundle(for: TestUtils.self)
+            #endif
+        } else {
+            bundle = Bundle(for: TestUtils.self)
+        }
+        
+        // Try to find in the bundle first
+        if let url = bundle.url(forResource: filename, withExtension: ext) {
+            return url
+        }
+        
+        // Try looking in the assets subdirectory in bundle
+        if let url = bundle.url(forResource: filename, withExtension: ext, subdirectory: "assets") {
+            return url
+        }
+        
+        // For xcodebuild tests, try common relative paths from the working directory
+        let fileManager = FileManager.default
+        let currentDir = fileManager.currentDirectoryPath
+        
+        let commonPaths = [
+            // Common locations for xcodebuild
+            "\(currentDir)/Tests/assets/\(filename).\(ext)",
+            "\(currentDir)/tests/assets/\(filename).\(ext)",
+            "\(currentDir)/.swiftpm/xcode/Tests/assets/\(filename).\(ext)",
+            // Fallback paths
+            "Tests/assets/\(filename).\(ext)",
+            "tests/assets/\(filename).\(ext)", 
+            "assets/\(filename).\(ext)",
+            "\(filename).\(ext)"
+        ]
+        
+        for path in commonPaths {
+            if fileManager.fileExists(atPath: path) {
+                return URL(fileURLWithPath: path)
+            }
+        }
+        
+        // Debug: print current directory and search paths
+        print("Current directory: \(currentDir)")
+        print("Searched for: \(filename).\(ext)")
+        print("Searched paths:")
+        for path in commonPaths {
+            print("  - \(path) (exists: \(fileManager.fileExists(atPath: path)))")
+        }
+        
+        return nil
+    }
+    
     // Helper function to load remote banana classification model
     public static func loadBananasModel(modelVersion: Int = 6) async -> RFModel? {
         let rf = RoboflowMobile(apiKey: BANANA_API_KEY, apiURL: "https://api.roboflow.com")
@@ -68,11 +131,19 @@ public class TestUtils {
 
     // Helper function to load image and convert to CVPixelBuffer
     public static func loadImageAsPixelBuffer(from imagePath: String) -> CVPixelBuffer? {
-        let imageURL = URL(fileURLWithPath: imagePath)
+        // Extract filename and extension from the path
+        let url = URL(fileURLWithPath: imagePath)
+        let filename = url.deletingPathExtension().lastPathComponent
+        let ext = url.pathExtension
+        
+        guard let imageURL = getResourceURL(for: filename, withExtension: ext) else {
+            XCTFail("Failed to find test image: \(imagePath). Searched in bundle and common locations.")
+            return nil
+        }
         
         guard let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
               let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
-            XCTFail("Failed to load test image from \(imagePath)")
+            XCTFail("Failed to load test image from \(imageURL.path)")
             return nil
         }
         
@@ -125,10 +196,18 @@ public class TestUtils {
     #if canImport(UIKit)
     // Helper function to load UIImage for testing
     public static func loadUIImage(from imagePath: String) -> UIImage? {
-        let imageURL = URL(fileURLWithPath: imagePath)
+        // Extract filename and extension from the path
+        let url = URL(fileURLWithPath: imagePath)
+        let filename = url.deletingPathExtension().lastPathComponent
+        let ext = url.pathExtension
+        
+        guard let imageURL = getResourceURL(for: filename, withExtension: ext) else {
+            XCTFail("Failed to find test image: \(imagePath). Searched in bundle and common locations.")
+            return nil
+        }
         
         guard let imageData = try? Data(contentsOf: imageURL) else {
-            XCTFail("Failed to load image data from \(imagePath)")
+            XCTFail("Failed to load image data from \(imageURL.path)")
             return nil
         }
         

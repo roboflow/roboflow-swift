@@ -62,6 +62,10 @@ jobs:
     - name: Run Swift package tests
       run: |
         swift test
+
+    - name: Run Xcode tests
+      run: |
+        xcodebuild test -scheme RoboflowTests -destination 'platform=iOS Simulator,OS=18.5,name=iPhone 16'
         
     - name: Validate package structure
       run: swift package describe

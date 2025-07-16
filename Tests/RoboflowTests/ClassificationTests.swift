@@ -214,7 +214,7 @@ final class ClassificationTests: XCTestCase {
                 XCTAssertFalse(prediction.className.isEmpty, "Class name should not be empty")
                 XCTAssertGreaterThanOrEqual(prediction.confidence, 0.0, "Confidence should be >= 0")
                 XCTAssertLessThanOrEqual(prediction.confidence, 1.0, "Confidence should be <= 1")
-                XCTAssertGreaterThanOrEqual(prediction.classIndex, 0, "Class index should be >= 0")
+                XCTAssertGreaterThanOrEqual(prediction.classId, 0, "Class index should be >= 0")
             }
             
             // Verify meaningful results
@@ -414,7 +414,7 @@ final class ClassificationTests: XCTestCase {
                 XCTAssertFalse(prediction.className.isEmpty, "Class name should not be empty")
                 XCTAssertGreaterThanOrEqual(prediction.confidence, 0.0, "Confidence should be >= 0")
                 XCTAssertLessThanOrEqual(prediction.confidence, 1.0, "Confidence should be <= 1")
-                XCTAssertGreaterThanOrEqual(prediction.classIndex, 0, "Class index should be >= 0")
+                XCTAssertGreaterThanOrEqual(prediction.classId, 0, "Class index should be >= 0")
             }
             
             // Verify meaningful results

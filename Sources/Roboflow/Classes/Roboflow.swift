@@ -7,6 +7,7 @@
 
 import CoreML
 import Vision
+import Foundation
 
 ///Interface for interacting with the Roboflow API
 public class RoboflowMobile: NSObject {
@@ -23,15 +24,20 @@ public class RoboflowMobile: NSObject {
         self.apiURL = apiURL
         
         //Generate a unique device ID
-        if #available(macOS 12.0, *) {
+        #if os(iOS) || os(macOS)
+        if #available(iOS 16.0, macOS 12.0, *) {
             guard let deviceID = getDeviceId() else {
                 fatalError("Failed to generate device ID")
             }
             self.deviceID = deviceID
         } else {
-            // Fallback on earlier versions
-            fatalError("macOS 12.0 or later is required")
+            // Fallback for earlier versions - generate a UUID
+            self.deviceID = UUID().uuidString
         }
+        #else
+        // Fallback for other platforms - generate a UUID
+        self.deviceID = UUID().uuidString
+        #endif
     }
     
     func getModelClass(modelType: String) -> RFModel {
@@ -281,10 +287,11 @@ public class RoboflowMobile: NSObject {
         // Create extraction directory
         try FileManager.default.createDirectory(at: extractionDirectory, withIntermediateDirectories: true, attributes: nil)
         
-        // Use NSTask/Process to unzip the file
+        #if os(macOS)
+        // Use command line unzip on macOS
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        process.arguments = ["-q", zipURL.path, "-d", "\(extractionDirectory.path)/weights.mlpackage"]
+        process.arguments = ["-q", zipURL.path, "-d", extractionDirectory.path]
         
         try process.run()
         process.waitUntilExit()
@@ -292,28 +299,39 @@ public class RoboflowMobile: NSObject {
         if process.terminationStatus != 0 {
             throw NSError(domain: "UnzipError", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: "Failed to unzip file"])
         }
+        #else
+        // Use iOS-compatible zip extraction
+        try ZipExtractor.extractZip(zipURL: zipURL, to: extractionDirectory)
+        #endif
         
-        // Find the .mlmodel file in the extracted directory
-        let contents = try FileManager.default.contentsOfDirectory(at: extractionDirectory, includingPropertiesForKeys: nil, options: [])
+        // Find the .mlmodel or .mlpackage file in the extracted directory
+        let result = try findModelFile(in: extractionDirectory)
         
+        // Note: Don't clean up extraction directory here - let the system handle cleanup
+        // The temp directory will be cleaned up automatically by the OS
+        
+        return result
+    }
+    
+    private func findModelFile(in directory: URL) throws -> URL {
+        let contents = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil, options: [])
+        
+        // First, look for .mlmodel or .mlpackage files directly
         for url in contents {
-            if url.pathExtension.lowercased() == "mlmodel" {
-                return url
-            }
-            // Also check for .mlpackage directories
-            if url.pathExtension.lowercased() == "mlpackage" {
+            let ext = url.pathExtension.lowercased()
+            if ext == "mlmodel" || ext == "mlpackage" {
                 return url
             }
         }
         
-        // If no .mlmodel or .mlpackage found, search recursively
+        // If not found, search recursively
         for url in contents {
             if url.hasDirectoryPath {
-                let nestedContents = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil, options: [])
-                for nestedUrl in nestedContents {
-                    if nestedUrl.pathExtension.lowercased() == "mlmodel" || nestedUrl.pathExtension.lowercased() == "mlpackage" {
-                        return nestedUrl
-                    }
+                do {
+                    return try findModelFile(in: url)
+                } catch {
+                    // Continue searching in other directories
+                    continue
                 }
             }
         }
