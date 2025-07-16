@@ -257,24 +257,62 @@ public class RoboflowMobile: NSObject {
                         finalModelURL = try self.unzipModelFile(zipURL: finalModelURL)
                     }
                     
+                    print("Compiling model at: \(finalModelURL)")
+                    
                     //Compile the downloaded model
                     let compiledModelURL = try MLModel.compileModel(at: finalModelURL)
-                    let documentsURL = try
-                    FileManager.default.url(for: .documentDirectory,
-                                            in: .userDomainMask,
-                                            appropriateFor: nil,
-                                            create: false)
+                    
+                    print("Model compiled to: \(compiledModelURL)")
+                    
+                    // Ensure Documents directory exists
+                    let documentsURL = try FileManager.default.url(for: .documentDirectory,
+                                                                    in: .userDomainMask,
+                                                                    appropriateFor: nil,
+                                                                    create: true)
+                    
                     let savedURL = documentsURL.appendingPathComponent("\(modelName)-\(modelVersion).mlmodelc")
+                    
+                    print("Attempting to move from: \(compiledModelURL)")
+                    print("To: \(savedURL)")
+                    
+                    // Check if the compiled model exists
+                    guard FileManager.default.fileExists(atPath: compiledModelURL.path) else {
+                        let error = NSError(domain: "ModelCompilationError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Compiled model does not exist at: \(compiledModelURL.path)"])
+                        print("Error: \(error.localizedDescription)")
+                        completion(nil, error)
+                        return
+                    }
+                    
+                    // Remove existing file if it exists
+                    if FileManager.default.fileExists(atPath: savedURL.path) {
+                        try FileManager.default.removeItem(at: savedURL)
+                    }
+                    
+                    // Move the compiled model
                     do {
                         try FileManager.default.moveItem(at: compiledModelURL, to: savedURL)
+                        print("Successfully moved model to: \(savedURL)")
                     } catch {
-                        print(error.localizedDescription)
+                        print("Move failed with error: \(error.localizedDescription)")
+                        // If move fails, try copying instead
+                        do {
+                            try FileManager.default.copyItem(at: compiledModelURL, to: savedURL)
+                            print("Successfully copied model to: \(savedURL)")
+                        } catch {
+                            print("Copy also failed: \(error.localizedDescription)")
+                            completion(nil, error)
+                            return
+                        }
                     }
+                    
                     completion(savedURL, nil)
                 } catch {
-                    print(error.localizedDescription)
+                    print("Model compilation/processing error: \(error.localizedDescription)")
                     completion(nil, error)
                 }
+            } else {
+                let error = NSError(domain: "DownloadError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to download model"])
+                completion(nil, error)
             }
         }
     }
