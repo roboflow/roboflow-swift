@@ -17,60 +17,19 @@ public class RFClassificationModel: RFModel {
     }
     
     //Default model configuration parameters
-    var threshold: Double = 0.5
-    var classes: [String] = []
-    
-    //Configure the parameters for the model
-    public override func configure(threshold: Double, overlap: Double, maxObjects: Float, processingMode: ProcessingMode = .balanced, maxNumberPoints: Int = 500) {
-        self.threshold = threshold
-    }
+    var multiclass: Bool = false
     
     //Load the retrieved CoreML model into an already created RFClassificationModel instance
-    override func loadMLModel(modelPath: URL, colors: [String: String], classes: [String]) -> Error? {
-        self.classes = classes
+    override func loadMLModel(modelPath: URL, colors: [String: String], classes: [String], environment: [String: Any]) -> Error? {
+        let _ = super.loadMLModel(modelPath: modelPath, colors: colors, classes: classes, environment: environment)
+        if let _ = environment["MULTICLASS"] {
+            self.multiclass = true
+        }
         do {
             if #available(macOS 10.14, *) {
                 let config = MLModelConfiguration()
                 if #available(macOS 10.15, *) {
                     mlModel = try MLModel(contentsOf: modelPath, configuration: config)
-                } else {
-                    // Fallback on earlier versions
-                    return UnsupportedOSError()
-                }
-                visionModel = try VNCoreMLModel(for: mlModel)
-                let request = VNCoreMLRequest(model: visionModel)
-                request.imageCropAndScaleOption = .scaleFill
-                coreMLRequest = request
-            } else {
-                // Fallback on earlier versions
-                return UnsupportedOSError()
-            }
-            
-        } catch {
-            return error
-        }
-        return nil
-    }
-    
-    //Load a local model file (for manually placed models like ResNet)
-    public func loadLocalModel(modelPath: URL) -> Error? {
-        do {
-            if #available(macOS 10.14, *) {
-                let config = MLModelConfiguration()
-                if #available(macOS 10.15, *) {
-                    var modelURL = modelPath
-                    
-                    // If the model is .mlpackage, compile it first
-                    if modelPath.pathExtension == "mlpackage" {
-                        do {
-                            let compiledModelURL = try MLModel.compileModel(at: modelPath)
-                            modelURL = compiledModelURL
-                        } catch {
-                            return error
-                        }
-                    }
-                    
-                    mlModel = try MLModel(contentsOf: modelURL, configuration: config)
                 } else {
                     // Fallback on earlier versions
                     return UnsupportedOSError()
@@ -141,20 +100,12 @@ public class RFClassificationModel: RFModel {
                 let rawValues = multiArray.dataPointer.bindMemory(to: Float.self, capacity: multiArray.count)
                 
                 // Check if values are logits (outside 0-1 range) and need softmax
-                var needsSoftmax = false
-                for i in 0..<multiArray.count {
-                    if rawValues[i] < 0.0 || rawValues[i] > 1.0 {
-                        needsSoftmax = true
-                        break
-                    }
-                }
-                
                 let probabilities: [Float]
-                if needsSoftmax {
+                if !multiclass {
                     // Apply softmax to convert logits to probabilities
                     probabilities = applySoftmax(logits: rawValues, count: multiArray.count)
                 } else {
-                    // Values are already probabilities
+                    // Values are already probabilities (sigmoid applied in model)
                     probabilities = Array(UnsafeBufferPointer(start: rawValues, count: multiArray.count))
                 }
                 
@@ -183,7 +134,11 @@ public class RFClassificationModel: RFModel {
                 return pred1.confidence > pred2.confidence
             }
             
-            completion(predictions, nil)
+            if multiclass {
+                completion(predictions, nil)
+            } else {
+                completion(predictions.isEmpty ? [] : [predictions[0]], nil)
+            }
         } catch let error {
             completion(nil, error)
         }

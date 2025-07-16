@@ -20,6 +20,9 @@ final class ClassificationTests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
+        let rf = RoboflowMobile(apiKey: API_KEY)
+        rf.clearModelCache(modelName: "banana-ripeness-frqdw", modelVersion: 6)
+        rf.clearModelCache(modelName: "banana-ripeness-frqdw", modelVersion: 5)
     }
 
     override func tearDownWithError() throws {
@@ -214,7 +217,7 @@ final class ClassificationTests: XCTestCase {
                 XCTAssertFalse(prediction.className.isEmpty, "Class name should not be empty")
                 XCTAssertGreaterThanOrEqual(prediction.confidence, 0.0, "Confidence should be >= 0")
                 XCTAssertLessThanOrEqual(prediction.confidence, 1.0, "Confidence should be <= 1")
-                XCTAssertGreaterThanOrEqual(prediction.classIndex, 0, "Class index should be >= 0")
+                XCTAssertGreaterThanOrEqual(prediction.classId, 0, "Class index should be >= 0")
             }
             
             // Verify meaningful results
@@ -414,7 +417,7 @@ final class ClassificationTests: XCTestCase {
                 XCTAssertFalse(prediction.className.isEmpty, "Class name should not be empty")
                 XCTAssertGreaterThanOrEqual(prediction.confidence, 0.0, "Confidence should be >= 0")
                 XCTAssertLessThanOrEqual(prediction.confidence, 1.0, "Confidence should be <= 1")
-                XCTAssertGreaterThanOrEqual(prediction.classIndex, 0, "Class index should be >= 0")
+                XCTAssertGreaterThanOrEqual(prediction.classId, 0, "Class index should be >= 0")
             }
             
             // Verify meaningful results
@@ -425,4 +428,69 @@ final class ClassificationTests: XCTestCase {
         }
     }
     #endif
+
+    func testLoadCarsModel() async {
+        guard let model = await TestUtils.loadCarsModel() else {
+            XCTFail("Failed to load cars model")
+            return
+        }
+        
+        // Configure the model
+        model.configure(threshold: 0.1, overlap: 0.0, maxObjects: 0)
+        
+        self.model = model
+    }
+    
+    func testCarsClassificationInference() async {
+        guard let model = await TestUtils.loadCarsModel() else {
+            XCTFail("Failed to load cars model")
+            return
+        }
+        
+        // Configure the model with low threshold to get more predictions
+        model.configure(threshold: 0.5, overlap: 0.0, maxObjects: 0)
+        
+        // Use cars image for testing
+        guard let buffer = TestUtils.loadImageAsPixelBuffer(from: "Tests/assets/car.jpg") else {
+            XCTFail("Failed to load cars test image")
+            return
+        }
+        
+        // Test detect method with CVPixelBuffer
+        let (basePredictions, inferenceError) = await model.detect(pixelBuffer: buffer)
+        
+        XCTAssertNil(inferenceError, "Classification inference failed: \(inferenceError?.localizedDescription ?? "unknown error")")
+        XCTAssertNotNil(basePredictions, "Predictions should not be nil")
+        
+        if let basePredictions = basePredictions {
+            XCTAssertGreaterThan(basePredictions.count, 0, "Should have at least one prediction")
+            XCTAssertEqual(basePredictions.count, 6, "Should have exactly 6 predictions")
+            
+            // Cast to RFClassificationPrediction to test specific properties
+            for basePrediction in basePredictions {
+                guard let prediction = basePrediction as? RFClassificationPrediction else {
+                    XCTFail("Prediction should be of type RFClassificationPrediction")
+                    continue
+                }
+                
+                XCTAssertFalse(prediction.className.isEmpty, "Class name should not be empty")
+                XCTAssertGreaterThanOrEqual(prediction.confidence, 0.0, "Confidence should be >= 0")
+                XCTAssertLessThanOrEqual(prediction.confidence, 1.0, "Confidence should be <= 1")
+                XCTAssertGreaterThanOrEqual(prediction.classId, 0, "Class index should be >= 0")
+                
+                // Test getValues() method
+                let values = prediction.getValues()
+                XCTAssertNotNil(values["class"])
+                XCTAssertNotNil(values["confidence"])
+                XCTAssertNotNil(values["classId"])
+            }
+            
+            // Verify we got meaningful results
+            XCTAssertGreaterThan(basePredictions.count, 0, "Should have predictions")
+            if let topBasePrediction = basePredictions.first,
+               let topPrediction = topBasePrediction as? RFClassificationPrediction {
+                XCTAssertGreaterThan(topPrediction.confidence, 0.1, "Top prediction should have reasonable confidence")
+            }
+        }
+    }
 } 

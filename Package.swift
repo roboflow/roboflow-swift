@@ -20,6 +20,13 @@ let package = Package(
             name: "Roboflow",
             dependencies: [], path: "Sources/Roboflow"
         ),
-        .testTarget(name:"RoboflowTests", dependencies: ["Roboflow"])
+        .testTarget(
+            name: "RoboflowTests", 
+            dependencies: ["Roboflow"],
+            path: "Tests/RoboflowTests",
+            resources: [
+                .copy("assets")
+            ]
+        )
     ]
 )

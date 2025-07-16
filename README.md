@@ -178,7 +178,11 @@ If you've previously installed the Roboflow SDK via Cocoapods, you'll need to up
 The SDK includes a comprehensive test suite that validates model loading and inference functionality. To run the tests:
 
 ```bash
+# for swift only tests
 swift test
+
+# for iOS simulator tests
+xcodebuild test -scheme RoboflowTests -destination 'platform=iOS Simulator,arch=arm64,OS=18.5,name=iPhone 16'
 ```
 
 The test suite includes:
