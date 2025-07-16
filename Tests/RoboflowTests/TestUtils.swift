@@ -100,6 +100,23 @@ public class TestUtils {
         }
         return model
     }
+
+    public static func loadCarsModel(modelVersion: Int = 1) async -> RFModel? {
+        let rf = RoboflowMobile(apiKey: API_KEY)
+        let (model, error, _, _) = await rf.load(model: "multiclass-gyn4p-l5m6c", modelVersion: modelVersion)
+        
+        if let error = error {
+            XCTFail("Failed to load cars model: \(error.localizedDescription)")
+            return nil
+        }
+        
+        XCTAssertNotNil(model, "Model should not be nil")
+        guard let _ = model as? RFClassificationModel else {
+            XCTFail("Model should be a classification model")
+            return nil
+        }
+        return model
+    }
     
     // Helper function to load object detection model
     public static func loadObjectDetectionModel() async -> RFModel? {

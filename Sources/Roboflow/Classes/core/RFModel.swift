@@ -26,12 +26,31 @@ public class RFModel: NSObject {
     var mlModel: MLModel!
     var visionModel: VNCoreMLModel!
     var coreMLRequest: VNCoreMLRequest!
-    
+    var environment: [String: Any]!
+    var modelPath: URL!
+    var colors: [String: String]!
+    var classes: [String]!
+    var threshold: Double = 0.5
+    var overlap: Double = 0.4
+    var maxObjects: Float = 20
+    var maskProcessingMode: ProcessingMode = .balanced
+    var maskMaxNumberPoints: Int = 500
+
     //Configure the parameters for the model
-    public func configure(threshold: Double, overlap: Double, maxObjects: Float, processingMode: ProcessingMode = .balanced, maxNumberPoints: Int = 500) {}
+    public func configure(threshold: Double = 0.5, overlap: Double = 0.5, maxObjects: Float = 20, processingMode: ProcessingMode = .balanced, maxNumberPoints: Int = 500) {
+        self.threshold = threshold
+        self.overlap = overlap
+        self.maxObjects = maxObjects
+        self.maskProcessingMode = processingMode
+        self.maskMaxNumberPoints = maxNumberPoints
+    }
     
     //Load the retrieved CoreML model into an already created RFObjectDetectionModel instance
-    func loadMLModel(modelPath: URL, colors: [String: String], classes: [String]) -> Error? {
+    func loadMLModel(modelPath: URL, colors: [String: String], classes: [String], environment: [String: Any]) -> Error? {
+        self.environment = environment
+        self.modelPath = modelPath
+        self.colors = colors
+        self.classes = classes
         return nil
     }
     

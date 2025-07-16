@@ -14,21 +14,11 @@ import Accelerate
 
 //Creates an instance of an ML model that's hosted on Roboflow
 public class RFInstanceSegmentationModel: RFObjectDetectionModel {
-    var classes = [String]()
-    var maskProcessingMode: ProcessingMode = .balanced
-    var maskMaxNumberPoints: Int = 500
-    
-    public override func configure(threshold: Double, overlap: Double, maxObjects: Float, processingMode: ProcessingMode = .balanced, maxNumberPoints: Int = 500) {
-        super.configure(threshold: threshold, overlap: overlap, maxObjects: maxObjects, processingMode: processingMode)
-        maskProcessingMode = processingMode
-        maskMaxNumberPoints = maxNumberPoints
-    }
     
     
     //Load the retrieved CoreML model into an already created RFObjectDetectionModel instance
-    override func loadMLModel(modelPath: URL, colors: [String: String], classes: [String]) -> Error? {
-        self.colors = colors
-        self.classes = classes
+    override func loadMLModel(modelPath: URL, colors: [String: String], classes: [String], environment: [String: Any]) -> Error? {
+        let _ = super.loadMLModel(modelPath: modelPath, colors: colors, classes: classes, environment: environment)
         do {
             
             if #available(iOS 16.0, macOS 13.0, *) {

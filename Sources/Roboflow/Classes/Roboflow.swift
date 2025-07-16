@@ -58,7 +58,8 @@ public class RoboflowMobile: NSObject {
             let colors = modelInfo["colors"] as? [String: String],
             let classes = modelInfo["classes"] as? [String],
             let name = modelInfo["name"] as? String,
-            let modelType = modelInfo["modelType"] as? String {
+            let modelType = modelInfo["modelType"] as? String,
+            let environment = modelInfo["environment"] as? [String: Any] {
             
             getConfigDataBackground(modelName: model, modelVersion: modelVersion, apiKey: apiKey, deviceID: deviceID)
             
@@ -69,7 +70,7 @@ public class RoboflowMobile: NSObject {
                                                                 in: .userDomainMask,
                                                                 appropriateFor: nil,
                                                                 create: false)
-                _ = modelObject.loadMLModel(modelPath: documentsURL.appendingPathComponent(modelURL), colors: colors, classes: classes)
+                _ = modelObject.loadMLModel(modelPath: documentsURL.appendingPathComponent(modelURL), colors: colors, classes: classes, environment: environment)
                 
                 completion(modelObject, nil, name, modelType)
             } catch {
@@ -78,15 +79,14 @@ public class RoboflowMobile: NSObject {
         } else if retries > 0 {
             clearModelCache(modelName: model, modelVersion: modelVersion)
             retries -= 1
-            getModelData(modelName: model, modelVersion: modelVersion, apiKey: apiKey, deviceID: deviceID) { [self] fetchedModel, error, modelName, modelType, colors, classes in
+            getModelData(modelName: model, modelVersion: modelVersion, apiKey: apiKey, deviceID: deviceID) { [self] fetchedModel, error, modelName, modelType, colors, classes, environment in
                 if let err = error {
                     completion(nil, err, "", "")
                 } else if let fetchedModel = fetchedModel {
                     let modelObject = getModelClass(modelType: modelType)
-                    _ = modelObject.loadMLModel(modelPath: fetchedModel, colors: colors ?? [:], classes: classes ?? [])
+                    _ = modelObject.loadMLModel(modelPath: fetchedModel, colors: colors ?? [:], classes: classes ?? [], environment: environment ?? [:])
                     completion(modelObject, nil, modelName, modelType)
                 } else {
-                    print("No Model Found. Trying Again.")
                     clearAndRetryLoadingModel(model, modelVersion, completion)
                 }
             }
@@ -138,7 +138,6 @@ public class RoboflowMobile: NSObject {
                 completion(dict, nil)
                 
             } catch {
-                print(error.localizedDescription)
                 completion(nil, error.localizedDescription)
             }
         }).resume()
@@ -152,10 +151,10 @@ public class RoboflowMobile: NSObject {
     
     
     //Get the model metadata from the Roboflow API
-    private func getModelData(modelName: String, modelVersion: Int, apiKey: String, deviceID: String, completion: @escaping (URL?, Error?, String, String, [String: String]?, [String]?)->()) {
+    private func getModelData(modelName: String, modelVersion: Int, apiKey: String, deviceID: String, completion: @escaping (URL?, Error?, String, String, [String: String]?, [String]?, [String: Any]?)->()) {
         getConfigData(modelName: modelName, modelVersion: modelVersion, apiKey: apiKey, deviceID: deviceID) { data, error in
             if let error = error {
-                completion(nil, error, "", "", nil, nil)
+                completion(nil, error, "", "", nil, nil, nil)
                 return
             }
             
@@ -165,7 +164,7 @@ public class RoboflowMobile: NSObject {
                   let modelType = coreMLDict["modelType"] as? String,
                   let modelURLString = coreMLDict["model"] as? String,
                   let modelURL = URL(string: modelURLString) else {
-                completion(nil, error, "", "", nil, nil)
+                completion(nil, error, "", "", nil, nil, nil)
                 return
             }
             
@@ -188,28 +187,29 @@ public class RoboflowMobile: NSObject {
             //Download the model from the link in the API response
             self.downloadModelFile(modelName: "\(modelName)-\(modelVersion).mlmodel", modelVersion: modelVersion, modelURL: modelURL) { fetchedModel, error in
                 if let error = error {
-                    completion(nil, error, "", "", nil, nil)
+                    completion(nil, error, "", "", nil, nil, nil)
                     return
                 }
                 
                 if let fetchedModel = fetchedModel {
-                    _ = self.cacheModelInfo(modelName: modelName, modelVersion: modelVersion, colors: colors ?? [:], classes: classes ?? [], name: name, modelType: modelType, compiledModelURL: fetchedModel)
-                    completion(fetchedModel, nil, name, modelType, colors, classes)
+                    _ = self.cacheModelInfo(modelName: modelName, modelVersion: modelVersion, colors: colors ?? [:], classes: classes ?? [], name: name, modelType: modelType, compiledModelURL: fetchedModel, environment: environmentDict ?? [:])
+                    completion(fetchedModel, nil, name, modelType, colors, classes, environmentDict)
                 } else {
-                    completion(nil, error, "", "", nil, nil)
+                    completion(nil, error, "", "", nil, nil, nil)
                 }
             }
         }
     }
 
 
-    private func cacheModelInfo(modelName: String, modelVersion: Int, colors: [String: String], classes: [String], name: String, modelType: String, compiledModelURL: URL) -> [String: Any]? {
+    private func cacheModelInfo(modelName: String, modelVersion: Int, colors: [String: String], classes: [String], name: String, modelType: String, compiledModelURL: URL, environment: [String: Any]) -> [String: Any]? {
         let modelInfo: [String : Any] = [
             "colors": colors,
             "classes": classes,
             "name": name,
             "modelType": modelType,
-            "compiledModelURL": compiledModelURL.lastPathComponent
+            "compiledModelURL": compiledModelURL.lastPathComponent,
+            "environment": environment
         ]
         
         do {
@@ -227,8 +227,6 @@ public class RoboflowMobile: NSObject {
             if let modelInfoData = UserDefaults.standard.data(forKey: "\(modelName)-\(modelVersion)") {
                 let decodedData = try NSKeyedUnarchiver.unarchivedObject(ofClasses: [NSDictionary.self, NSString.self, NSArray.self], from: modelInfoData) as? [String: Any]
                 return decodedData
-            } else {
-                print("Error: Could not find data for key \(modelName)-\(modelVersion)")
             }
         } catch {
             print("Error unarchiving data: \(error.localizedDescription)")
@@ -257,12 +255,8 @@ public class RoboflowMobile: NSObject {
                         finalModelURL = try self.unzipModelFile(zipURL: finalModelURL)
                     }
                     
-                    print("Compiling model at: \(finalModelURL)")
-                    
                     //Compile the downloaded model
                     let compiledModelURL = try MLModel.compileModel(at: finalModelURL)
-                    
-                    print("Model compiled to: \(compiledModelURL)")
                     
                     // Ensure Documents directory exists
                     let documentsURL = try FileManager.default.url(for: .documentDirectory,
@@ -272,13 +266,9 @@ public class RoboflowMobile: NSObject {
                     
                     let savedURL = documentsURL.appendingPathComponent("\(modelName)-\(modelVersion).mlmodelc")
                     
-                    print("Attempting to move from: \(compiledModelURL)")
-                    print("To: \(savedURL)")
-                    
                     // Check if the compiled model exists
                     guard FileManager.default.fileExists(atPath: compiledModelURL.path) else {
                         let error = NSError(domain: "ModelCompilationError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Compiled model does not exist at: \(compiledModelURL.path)"])
-                        print("Error: \(error.localizedDescription)")
                         completion(nil, error)
                         return
                     }
@@ -291,15 +281,11 @@ public class RoboflowMobile: NSObject {
                     // Move the compiled model
                     do {
                         try FileManager.default.moveItem(at: compiledModelURL, to: savedURL)
-                        print("Successfully moved model to: \(savedURL)")
                     } catch {
-                        print("Move failed with error: \(error.localizedDescription)")
                         // If move fails, try copying instead
                         do {
                             try FileManager.default.copyItem(at: compiledModelURL, to: savedURL)
-                            print("Successfully copied model to: \(savedURL)")
                         } catch {
-                            print("Copy also failed: \(error.localizedDescription)")
                             completion(nil, error)
                             return
                         }
