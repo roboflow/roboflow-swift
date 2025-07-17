@@ -9,14 +9,14 @@ import Foundation
 import CoreGraphics
 
 public class RFObjectDetectionPrediction: RFPrediction {
-    let x: Float
-    let y: Float
-    let width: Float
-    let height: Float
-    let className: String
-    let confidence: Float
-    let color: CGColor
-    let box: CGRect
+    public let x: Float
+    public let y: Float
+    public let width: Float
+    public let height: Float
+    public let className: String
+    public let confidence: Float
+    public let color: CGColor
+    public let box: CGRect
     
     public init(x: Float, y: Float, width: Float, height: Float, className: String, confidence: Float, color: CGColor, box: CGRect) {
         self.x = x

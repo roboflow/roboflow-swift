@@ -9,8 +9,8 @@ import Foundation
 import CoreGraphics
 
 public class RFInstanceSegmentationPrediction: RFObjectDetectionPrediction {
-    var points: [CGPoint]
-    var mask: [[UInt8]]?
+    public var points: [CGPoint]
+    public var mask: [[UInt8]]?
     
     public init(x: Float, y: Float, width: Float, height: Float, className: String, confidence: Float, color: CGColor, box: CGRect, points: [CGPoint]) {
         self.points = points

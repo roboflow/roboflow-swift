@@ -15,19 +15,12 @@ public class RFObjectDetectionModel: RFModel {
         super.init()
     }
     
-    //Default model configuration parameters
-    var threshold: Double = 0.5
-    var overlap: Double = 0.5
-    var maxObjects: Float = 20.0
-    var colors: [String: String]!
     //Stores the retreived ML model
     var thresholdProvider = ThresholdProvider()
     
     //Configure the parameters for the model
-    public override func configure(threshold: Double, overlap: Double, maxObjects: Float, processingMode: ProcessingMode = .balanced, maxNumberPoints: Int = 500) {
-        self.threshold = threshold
-        self.overlap = overlap
-        self.maxObjects = maxObjects
+    public override func configure(threshold: Double = 0.5, overlap: Double = 0.5, maxObjects: Float = 20, processingMode: ProcessingMode = .balanced, maxNumberPoints: Int = 500) {
+        super.configure(threshold: threshold, overlap: overlap, maxObjects: maxObjects, processingMode: processingMode, maxNumberPoints: maxNumberPoints)
         thresholdProvider.values = ["iouThreshold": MLFeatureValue(double: self.overlap),
                                     "confidenceThreshold": MLFeatureValue(double: self.threshold)]
         if visionModel != nil {
@@ -40,8 +33,8 @@ public class RFObjectDetectionModel: RFModel {
     }
     
     //Load the retrieved CoreML model into an already created RFObjectDetectionModel instance
-    override func loadMLModel(modelPath: URL, colors: [String: String], classes: [String]) -> Error? {
-        self.colors = colors
+    override func loadMLModel(modelPath: URL, colors: [String: String], classes: [String], environment: [String: Any]) -> Error? {
+        super.loadMLModel(modelPath: modelPath, colors: colors, classes: classes, environment: environment)
         do {
             if #available(macOS 10.14, *) {
                 let config = MLModelConfiguration()
@@ -74,7 +67,7 @@ public class RFObjectDetectionModel: RFModel {
     
     //Run image through model and return Detections
     @available(*, renamed: "detect(image:)")
-    public override func detect(pixelBuffer buffer: CVPixelBuffer, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
+    public override func detect(pixelBuffer buffer: CVPixelBuffer, completion: @escaping (([RFPrediction]?, Error?) -> Void)) {
         guard let coreMLRequest = self.coreMLRequest else {
             completion(nil, "Model initialization failed.")
             return

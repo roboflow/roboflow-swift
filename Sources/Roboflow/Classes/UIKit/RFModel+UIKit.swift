@@ -12,7 +12,7 @@ import UIKit
 
 extension RFModel {
     /// Run image through model and return detections
-    public func detect(image: UIImage, completion: @escaping (([RFObjectDetectionPrediction]?, Error?) -> Void)) {
+    public func detect(image: UIImage, completion: @escaping (([RFPrediction]?, Error?) -> Void)) {
         let size = image.size
         let attrs = [
             kCVPixelBufferCGImageCompatibilityKey: kCFBooleanTrue!,
@@ -71,7 +71,6 @@ extension RFModel {
         }
     }
 }
-
 #endif
 
 func hexStringToCGColor (hex:String) -> CGColor {
