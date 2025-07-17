@@ -59,6 +59,10 @@ jobs:
       run:
         swift build
 
+    - name: Run Swift package tests
+      run:
+        swift test
+
     - name: Run Xcode tests
       run: |
         xcodebuild test -scheme RoboflowTests -destination 'platform=macOS,variant=Mac Catalyst,arch=arm64'
