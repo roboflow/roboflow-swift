@@ -178,6 +178,9 @@ final class ObjectDetectionTests: XCTestCase {
         let (predictions, inferenceError) = await model.detect(pixelBuffer: buffer)
         XCTAssertNil(inferenceError, "RFDetr inference failed: \(inferenceError?.localizedDescription ?? "unknown error")")
         XCTAssertNotNil(predictions, "Predictions should not be nil")
+        for prediction in predictions ?? [] {
+            print("prediction: \(prediction.getValues())")
+        }
         XCTAssert(predictions?.count ?? 0 == 2, "RFDetr should detect 2 objects")
         
         if let predictions = predictions {
