@@ -57,8 +57,7 @@ public class RFDetrObjectDetectionModel: RFObjectDetectionModel {
     public override func detect(pixelBuffer buffer: CVPixelBuffer, completion: @escaping (([RFPrediction]?, Error?) -> Void)) {
         
         // Try VNCoreML approach first (macOS 10.15+ / iOS 13.0+)
-        if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *),
-           let coreMLRequest = self.coreMLRequest {
+        if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
             detectWithVNCoreML(pixelBuffer: buffer, completion: completion)
         } else {
             // Fallback to direct MLModel usage for earlier versions
