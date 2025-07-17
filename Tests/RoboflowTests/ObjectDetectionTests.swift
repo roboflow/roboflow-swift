@@ -168,7 +168,7 @@ final class ObjectDetectionTests: XCTestCase {
         }
         
         // Configure the model
-        model.configure(threshold: 0.1, overlap: 0.5, maxObjects: 20)
+        model.configure(threshold: 0.5, overlap: 0.5, maxObjects: 20)
         
         guard let buffer = TestUtils.loadImageAsPixelBuffer(from: "Tests/assets/hard-hat.jpeg") else {
             XCTFail("Failed to load hard-hat test image")
