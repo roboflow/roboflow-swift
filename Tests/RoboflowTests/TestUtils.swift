@@ -145,6 +145,20 @@ public class TestUtils {
         XCTAssertNotNil(model, "Model should not be nil")
         return model
     }
+    
+    // Helper function to load RFDetr model from API
+    public static func loadRFDetrModel() async -> RFModel? {
+        let rf = RoboflowMobile(apiKey: API_KEY)
+        let (model, error, _, _) = await rf.load(model: "hard-hat-sample-txcpu", modelVersion: 7)
+        
+        if let error = error {
+            XCTFail("Failed to load RFDetr model: \(error.localizedDescription)")
+            return nil
+        }
+        
+        XCTAssertNotNil(model, "RFDetr model should not be nil")
+        return model
+    }
 
     // Helper function to load image and convert to CVPixelBuffer
     public static func loadImageAsPixelBuffer(from imagePath: String) -> CVPixelBuffer? {

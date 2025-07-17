@@ -34,7 +34,7 @@ public class RFObjectDetectionModel: RFModel {
     
     //Load the retrieved CoreML model into an already created RFObjectDetectionModel instance
     override func loadMLModel(modelPath: URL, colors: [String: String], classes: [String], environment: [String: Any]) -> Error? {
-        super.loadMLModel(modelPath: modelPath, colors: colors, classes: classes, environment: environment)
+        let _ = super.loadMLModel(modelPath: modelPath, colors: colors, classes: classes, environment: environment)
         do {
             if #available(macOS 10.14, *) {
                 let config = MLModelConfiguration()

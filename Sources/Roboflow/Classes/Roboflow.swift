@@ -47,6 +47,9 @@ public class RoboflowMobile: NSObject {
         if (modelType.contains("vit") || modelType.contains("resnet")) {
             return RFClassificationModel()
         }
+        if (modelType.contains("detr") || modelType.contains("rfdetr")) {
+            return RFDetrObjectDetectionModel()
+        }
         return RFObjectDetectionModel()
     }
     
@@ -254,7 +257,7 @@ public class RoboflowMobile: NSObject {
                         // Unzip the file and find the .mlmodel file
                         finalModelURL = try self.unzipModelFile(zipURL: finalModelURL)
                     }
-                    
+                                    
                     //Compile the downloaded model
                     let compiledModelURL = try MLModel.compileModel(at: finalModelURL)
                     
