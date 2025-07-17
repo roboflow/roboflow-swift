@@ -8,7 +8,6 @@
 import CoreML
 
 /// Model Prediction Input Type
-@available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
 class RFDetrInput : MLFeatureProvider {
 
     /// image_input as MultiArray (Float16, 1 × 3 × 560 × 560)
@@ -93,7 +92,6 @@ class RFDetrInput : MLFeatureProvider {
 }
 
 /// Model Prediction Output Type
-@available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
 class RFDetrOutput : MLFeatureProvider {
 
     /// Source provided by CoreML
@@ -154,7 +152,6 @@ class RFDetrOutput : MLFeatureProvider {
 }
 
 /// Class for model loading and prediction
-@available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
 class RFDetr {
     let model: MLModel
 
@@ -181,6 +178,7 @@ class RFDetr {
         Construct RFDetr instance by automatically loading the model from the app's bundle.
     */
     @available(*, deprecated, message: "Use init(configuration:) instead and handle errors appropriately.")
+    @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
     convenience init() {
         try! self.init(contentsOf: type(of:self).urlOfModelInThisBundle)
     }
@@ -193,6 +191,7 @@ class RFDetr {
 
         - throws: an NSError object that describes the problem
     */
+    @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
     convenience init(configuration: MLModelConfiguration) throws {
         try self.init(contentsOf: type(of:self).urlOfModelInThisBundle, configuration: configuration)
     }
@@ -204,6 +203,7 @@ class RFDetr {
 
         - throws: an NSError object that describes the problem
     */
+    @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
     convenience init(contentsOf modelURL: URL) throws {
         try self.init(model: MLModel(contentsOf: modelURL))
     }
@@ -217,6 +217,7 @@ class RFDetr {
 
         - throws: an NSError object that describes the problem
     */
+    @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
     convenience init(contentsOf modelURL: URL, configuration: MLModelConfiguration) throws {
         try self.init(model: MLModel(contentsOf: modelURL, configuration: configuration))
     }
@@ -341,6 +342,7 @@ class RFDetr {
 
         - returns: the result of the prediction as [RFDetrOutput]
     */
+    @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
     func predictions(inputs: [RFDetrInput], options: MLPredictionOptions = MLPredictionOptions()) throws -> [RFDetrOutput] {
         let batchIn = MLArrayBatchProvider(array: inputs)
         let batchOut = try model.predictions(from: batchIn, options: options)

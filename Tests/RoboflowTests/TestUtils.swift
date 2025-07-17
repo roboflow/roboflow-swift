@@ -146,55 +146,17 @@ public class TestUtils {
         return model
     }
     
-    // Helper function to load local RFDetr model
-    public static func loadLocalRFDetrModel() -> RFModel? {
+    // Helper function to load RFDetr model from API
+    public static func loadRFDetrModel() async -> RFModel? {
         let rf = RoboflowMobile(apiKey: API_KEY)
-        
-        // Path to the local RFDetr model
-        let modelPath = URL(fileURLWithPath: "Tests/assets/rfdetr_base_coreml_working_fp16.mlpackage")
-        
-        // Define some sample classes for COCO dataset (common for DETR models)
-        let classes = [
-            "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
-            "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
-            "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack",
-            "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball",
-            "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket",
-            "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
-            "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake",
-            "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop",
-            "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
-            "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
-        ]
-        
-        // Define colors for classes
-        let colors: [String: String] = [
-            "person": "#FF0000",
-            "car": "#00FF00", 
-            "bicycle": "#0000FF",
-            "motorcycle": "#FFFF00",
-            "bus": "#FF00FF",
-            "truck": "#00FFFF"
-        ]
-        
-        let (model, error, _, _) = rf.loadLocal(
-            modelPath: modelPath,
-            modelType: "detr",
-            classes: classes,
-            colors: colors
-        )
+        let (model, error, _, _) = await rf.load(model: "hard-hat-sample-txcpu", modelVersion: 7)
         
         if let error = error {
-            XCTFail("Failed to load local RFDetr model: \(error.localizedDescription)")
+            XCTFail("Failed to load RFDetr model: \(error.localizedDescription)")
             return nil
         }
         
-        XCTAssertNotNil(model, "Model should not be nil")
-        guard let _ = model as? RFDetrObjectDetectionModel else {
-            XCTFail("Model should be a RFDetrObjectDetectionModel")
-            return nil
-        }
-        
+        XCTAssertNotNil(model, "RFDetr model should not be nil")
         return model
     }
 
