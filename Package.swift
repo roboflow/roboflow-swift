@@ -7,12 +7,13 @@ let package = Package(
     defaultLocalization: "en",
     platforms: [
         .iOS(.v16),
+        .macOS(.v13),
     ],
     
     products: [
         .library(
             name: "Roboflow",
-            targets: ["Roboflow"]),
+            targets: ["Roboflow"])
     ],
     dependencies: [],
     targets: [

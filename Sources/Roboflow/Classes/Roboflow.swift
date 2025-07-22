@@ -228,7 +228,7 @@ public class RoboflowMobile: NSObject {
     private func loadModelCache(modelName: String, modelVersion: Int) -> [String: Any]? {
         do {
             if let modelInfoData = UserDefaults.standard.data(forKey: "\(modelName)-\(modelVersion)") {
-                let decodedData = try NSKeyedUnarchiver.unarchivedObject(ofClasses: [NSDictionary.self, NSString.self, NSArray.self], from: modelInfoData) as? [String: Any]
+                let decodedData = try NSKeyedUnarchiver.unarchivedObject(ofClasses: [NSDictionary.self, NSString.self, NSArray.self, NSNumber.self], from: modelInfoData) as? [String: Any]
                 return decodedData
             }
         } catch {
