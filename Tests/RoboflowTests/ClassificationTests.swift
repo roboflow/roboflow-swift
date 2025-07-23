@@ -21,8 +21,8 @@ final class ClassificationTests: XCTestCase {
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
         let rf = RoboflowMobile(apiKey: API_KEY)
-        rf.clearModelCache(modelName: "banana-ripeness-frqdw", modelVersion: 6)
-        rf.clearModelCache(modelName: "banana-ripeness-frqdw", modelVersion: 5)
+        // rf.clearModelCache(modelName: "banana-ripeness-frqdw", modelVersion: 6)
+        // rf.clearModelCache(modelName: "banana-ripeness-frqdw", modelVersion: 5)
     }
 
     override func tearDownWithError() throws {

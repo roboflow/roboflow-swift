@@ -26,7 +26,12 @@ public class RFDetrObjectDetectionModel: RFObjectDetectionModel {
         do {
             if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *) {
                 let config = MLModelConfiguration()
-
+                if #available(iOS 16.0, *) {
+                    config.computeUnits = .cpuAndNeuralEngine
+                } else {
+                    // Fallback on earlier versions
+                }
+                
                 // Use CPU-only execution on iOS Simulator to avoid Metal compatibility issues
                 #if targetEnvironment(simulator)
                     config.computeUnits = .cpuOnly
