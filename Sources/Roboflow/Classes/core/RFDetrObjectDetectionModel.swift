@@ -116,19 +116,14 @@ public class RFDetrObjectDetectionModel: RFObjectDetectionModel {
             }
             
             // Process RFDetr outputs to create detection objects
-            do {
-                let detections = try processRFDetrOutputs(
-                    boxes: boxesArray,
-                    scores: scoresArray,
-                    labels: labelsArray,
-                    imageWidth: Int(buffer.width()),
-                    imageHeight: Int(buffer.height())
-                )
-                completion(detections, nil)
-            } catch {
-                completion(nil, error)
-            }
-            
+            let detections = try processRFDetrOutputs(
+                boxes: boxesArray,
+                scores: scoresArray,
+                labels: labelsArray,
+                imageWidth: Int(buffer.width()),
+                imageHeight: Int(buffer.height())
+            )
+            completion(detections, nil)            
         } catch {
             completion(nil, error)
         }

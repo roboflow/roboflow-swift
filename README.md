@@ -182,7 +182,7 @@ The SDK includes a comprehensive test suite that validates model loading and inf
 swift test
 
 # for iOS simulator tests
-xcodebuild test -scheme RoboflowTests -destination 'platform=iOS Simulator,arch=arm64,OS=18.5,name=iPhone 16'
+xcodebuild test -scheme RoboflowTests -destination 'platform=macOS,variant=Mac Catalyst,arch=arm64'
 ```
 
 The test suite includes:

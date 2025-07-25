@@ -29,66 +29,6 @@ class RFDetrInput : MLFeatureProvider {
     init(image_input: MLMultiArray) {
         self.image_input = image_input
     }
-
-    convenience init(imageWith image: CGImage) throws {
-        let multiArray = try RFDetrInput.preprocessImage(image)
-        self.init(image_input: multiArray)
-    }
-
-    convenience init(imageAt image: URL) throws {
-        guard let cgImage = CGImage.create(from: image) else {
-            throw NSError(domain: "RFDetrInput", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not load image from URL"])
-        }
-        let multiArray = try RFDetrInput.preprocessImage(cgImage)
-        self.init(image_input: multiArray)
-    }
-    
-    convenience init(pixelBuffer: CVPixelBuffer) throws {
-        guard let cgImage = CGImage.create(from: pixelBuffer) else {
-            throw NSError(domain: "RFDetrInput", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not convert pixel buffer to CGImage"])
-        }
-        let multiArray = try RFDetrInput.preprocessImage(cgImage)
-        self.init(image_input: multiArray)
-    }
-
-    static func preprocessImage(_ image: CGImage) throws -> MLMultiArray {
-        // Create MLMultiArray with shape [1, 3, 560, 560] and Float32 type (converted to Float16 by CoreML)
-        let shape = [1, 3, 560, 560] as [NSNumber]
-        guard let multiArray = try? MLMultiArray(shape: shape, dataType: .float32) else {
-            throw NSError(domain: "RFDetrInput", code: 3, userInfo: [NSLocalizedDescriptionKey: "Could not create MLMultiArray"])
-        }
-        
-        // Resize image to 560x560
-        let targetSize = CGSize(width: 560, height: 560)
-        guard let resizedImage = image.resize(to: targetSize) else {
-            throw NSError(domain: "RFDetrInput", code: 4, userInfo: [NSLocalizedDescriptionKey: "Could not resize image"])
-        }
-        
-        // Convert to pixel data and normalize
-        guard let pixelData = resizedImage.pixelData() else {
-            throw NSError(domain: "RFDetrInput", code: 5, userInfo: [NSLocalizedDescriptionKey: "Could not extract pixel data"])
-        }
-        
-        // Preprocess: normalize to [0, 1] and convert to CHW format
-        let width = 560
-        let height = 560
-        
-        for y in 0..<height {
-            for x in 0..<width {
-                let pixelIndex = (y * width + x) * 4 // RGBA
-                let r = Float(pixelData[pixelIndex]) / 255.0
-                let g = Float(pixelData[pixelIndex + 1]) / 255.0  
-                let b = Float(pixelData[pixelIndex + 2]) / 255.0
-                
-                // Convert to CHW format and set in multiArray
-                multiArray[[0, 0, y, x] as [NSNumber]] = NSNumber(value: r)
-                multiArray[[0, 1, y, x] as [NSNumber]] = NSNumber(value: g)
-                multiArray[[0, 2, y, x] as [NSNumber]] = NSNumber(value: b)
-            }
-        }
-        
-        return multiArray
-    }
 }
 
 /// Model Prediction Output Type
@@ -326,10 +266,10 @@ class RFDetr {
 
         - returns: the result of the prediction as RFDetrOutput
     */
-    func prediction(pixelBuffer: CVPixelBuffer) throws -> RFDetrOutput {
-        let input_ = try RFDetrInput(pixelBuffer: pixelBuffer)
-        return try self.prediction(input: input_)
-    }
+    // func prediction(pixelBuffer: CVPixelBuffer) throws -> RFDetrOutput {
+    //     let input_ = try RFDetrInput(pixelBuffer: pixelBuffer)
+    //     return try self.prediction(input: input_)
+    // }
 
     /**
         Make a batch prediction using the structured interface
