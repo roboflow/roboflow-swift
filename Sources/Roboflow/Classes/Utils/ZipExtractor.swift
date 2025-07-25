@@ -217,7 +217,7 @@ public class ZipExtractor {
         // ZIP uses "raw deflate" without zlib headers, but Apple's Compression framework
         // expects different formats. Let's try multiple approaches.
         
-        return try data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) -> Data in
+        return data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) -> Data in
             let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: expectedSize)
             defer { buffer.deallocate() }
             
@@ -253,7 +253,7 @@ public class ZipExtractor {
             zlibData.append(data)
             zlibData.append(contentsOf: zlibFooter)
             
-            let finalResult = try zlibData.withUnsafeBytes { (zlibBytes: UnsafeRawBufferPointer) -> Data in
+            let finalResult = zlibData.withUnsafeBytes { (zlibBytes: UnsafeRawBufferPointer) -> Data in
                 let zlibDecompressedSize = compression_decode_buffer(
                     buffer, expectedSize,
                     zlibBytes.bindMemory(to: UInt8.self).baseAddress!, zlibData.count,
