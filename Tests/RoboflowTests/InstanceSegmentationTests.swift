@@ -20,6 +20,8 @@ final class InstanceSegmentationTests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
+        let rf = RoboflowMobile(apiKey: API_KEY)
+        rf.clearModelCache(modelName: "hat-1wxze-g6xvw", modelVersion: 1)
     }
 
     override func tearDownWithError() throws {

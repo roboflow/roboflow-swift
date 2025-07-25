@@ -93,3 +93,6 @@ iOSInjectionProject/
 
 **/*.mlpackage
 **/*.mlmodel
+**/*.mlmodelc
+
+examples/*
