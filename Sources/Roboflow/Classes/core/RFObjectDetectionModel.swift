@@ -88,7 +88,13 @@ public class RFObjectDetectionModel: RFModel {
                 var label:String = ""
                 if #available(macOS 10.14, *) {
                     if let recognizedResult = detectResult as? VNRecognizedObjectObservation, let classLabel = recognizedResult.labels.first?.identifier {
-                        label = classLabel
+                        // class labels may be stripped from the model when weights trained externally and uploaded.
+                        // if our class it is an integer and it is not a defined class, look it up in our class map.
+                        if let intValue = Int(classLabel), !classes.contains(classLabel), intValue < classes.count {
+                            label = classes[intValue]
+                        } else {
+                            label = classLabel
+                        }
                     }
                 } else {
                     // Fallback on earlier versions
