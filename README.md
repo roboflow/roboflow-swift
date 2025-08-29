@@ -191,3 +191,16 @@ The test suite includes:
 - **Cross-platform Compatibility**: All tests run without UIKit dependencies, ensuring compatibility across Apple platforms
 
 Test images are located in `Tests/assets/` and the tests automatically download and cache models for testing. All tests are designed to run without requiring additional setup or configuration.
+
+
+
+## Publishing a New Version
+
+To publish a new version to CocoaPods:
+
+1. Update the version number in `Roboflow.podspec`
+2. Issue a pull request and merge to the `main` branch
+3. The GitHub Action will automatically:
+   - Validate the podspec
+   - Create and push a git tag for the version
+   - Publish to CocoaPods trunk

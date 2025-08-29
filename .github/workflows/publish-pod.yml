@@ -1,0 +1,74 @@
+name: Publish to CocoaPods
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Roboflow.podspec'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all tags
+    
+    - name: Setup Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.2'
+        bundler-cache: false
+    
+    - name: Install CocoaPods
+      run: |
+        gem install cocoapods
+        pod --version
+    
+    - name: Extract version from podspec
+      id: get_version
+      run: |
+        VERSION=$(pod ipc spec Roboflow.podspec | jq -r '.version')
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "Detected version: $VERSION"
+    
+    - name: Validate podspec
+      run: |
+        echo "Linting pod..."
+        pod lib lint
+    
+    - name: Check if should publish
+      id: check_publish
+      run: |
+        # Check if tag already exists
+        if git rev-parse "${{ steps.get_version.outputs.VERSION }}" >/dev/null 2>&1; then
+          echo "Tag ${{ steps.get_version.outputs.VERSION }} already exists - will skip publishing"
+          echo "SHOULD_PUBLISH=false" >> $GITHUB_OUTPUT
+        else
+          echo "Tag ${{ steps.get_version.outputs.VERSION }} does not exist - will proceed with publishing"
+          echo "SHOULD_PUBLISH=true" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Create and push tag
+      if: steps.check_publish.outputs.SHOULD_PUBLISH
+      run: |
+        echo "Creating tag for version ${{ steps.get_version.outputs.VERSION }}..."
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+        git tag "${{ steps.get_version.outputs.VERSION }}"
+        git push origin "${{ steps.get_version.outputs.VERSION }}"
+        echo "Created and pushed tag: ${{ steps.get_version.outputs.VERSION }}"
+    
+    - name: Publish to CocoaPods
+      if: steps.check_publish.outputs.SHOULD_PUBLISH
+      env:
+        COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
+      run: |
+        echo "Publishing version ${{ steps.get_version.outputs.VERSION }} to CocoaPods..."
+        pod trunk push
+        echo "Successfully published to CocoaPods!"
