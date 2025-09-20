@@ -85,5 +85,5 @@ jobs:
         COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
       run: |
         echo "DRY RUN Publishing version ${{ steps.get_version.outputs.VERSION }} to CocoaPods..."
-        echo "pod trunk push"
+        echo pod trunk push
         echo "Successfully published to CocoaPods!"
