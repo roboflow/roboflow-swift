@@ -54,7 +54,7 @@ jobs:
         xcrun simctl list devices
         echo ""
         echo "Linting pod..."
-        pod lib lint --allow-warnings
+        pod lib lint
     
     - name: Create and push tag
       run: |
