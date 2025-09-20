@@ -48,7 +48,7 @@ jobs:
         xcrun simctl list devices
         echo ""
         echo "Linting pod..."
-        pod lib lint --verbose --allow-warnings
+        pod lib lint --allow-warnings
     
     - name: Check if should publish
       id: check_publish
