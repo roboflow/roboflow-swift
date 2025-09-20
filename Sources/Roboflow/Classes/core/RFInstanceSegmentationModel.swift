@@ -204,7 +204,12 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
                         print(error)
                     }
                     
-                    var polygon = (polys.count > 0 ? polys[0] : [])
+                    // Select largest contour: If multiple contours exist, picks the one with the most points
+                    // using max(by:) to match Python's argmax behavior
+                    var polygon: [CGPoint] = []
+                    if !polys.isEmpty {
+                        polygon = polys.max(by: { $0.count < $1.count }) ?? []
+                    }
                     
                     if polygon.count > maskMaxNumberPoints {
                         // ── 1. Decide which vertices to drop ──────────────────────────
