@@ -149,7 +149,7 @@ public class TestUtils {
     // Helper function to load YOLOLite model from API
     public static func loadYOLOLiteModel() async -> RFModel? {
         let rf = RoboflowMobile(apiKey: API_KEY)
-        let (model, error, _, _) = await rf.load(model: "hard-hat-workers-ry4vt", modelVersion: 3)
+        let (model, error, _, _) = await rf.load(model: "hard-hat-workers-ry4vt", modelVersion: 4)
 
         if let error = error {
             XCTFail("Failed to load YOLOLite model: \(error.localizedDescription)")
