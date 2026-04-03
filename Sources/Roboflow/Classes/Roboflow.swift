@@ -50,6 +50,9 @@ public class RoboflowMobile: NSObject {
         if (modelType.contains("detr") || modelType.contains("rfdetr")) {
             return RFDetrObjectDetectionModel()
         }
+        if (modelType.contains("yololite")) {
+            return RFYoloLiteObjectDetectionModel()
+        }
         return RFObjectDetectionModel()
     }
     
