@@ -86,12 +86,14 @@ public class RFYoloLiteObjectDetectionModel: RFObjectDetectionModel {
                 let box = VNImageRectForNormalizedRect(flippedBox, Int(buffer.width()), Int(buffer.height()))
 
                 var label = ""
+                // VNCoreML normalizes per-class confidences to sum to 1.0.
+                // Multiply observation-level confidence (raw sum) by the normalized
+                // top-label share to recover the original obj * max(cls) score.
                 var confidence: Float = result.confidence
 
                 if let topLabel = result.labels.first {
                     label = topLabel.identifier
-                    // Use per-class confidence (0-1) instead of observation-level (can be >1)
-                    confidence = topLabel.confidence
+                    confidence = min(result.confidence * topLabel.confidence, 1.0)
 
                     if let intValue = Int(label), !classes.contains(label), intValue < classes.count {
                         label = classes[intValue]
