@@ -148,7 +148,91 @@ final class ObjectDetectionTests: XCTestCase {
     #endif
     
 
-    
+
+    // MARK: - YOLOLite Model Tests
+
+    func testLoadYOLOLiteModel() async {
+        guard let model = await TestUtils.loadYOLOLiteModel() else {
+            XCTFail("Failed to load YOLOLite model")
+            return
+        }
+
+        model.configure(threshold: 0.4, overlap: 0.5, maxObjects: 100)
+        XCTAssertNotNil(model, "YOLOLite model should load successfully")
+    }
+
+    func testYOLOLiteInference() async {
+        guard let model = await TestUtils.loadYOLOLiteModel() else {
+            XCTFail("Failed to load YOLOLite model")
+            return
+        }
+
+        model.configure(threshold: 0.4, overlap: 0.5, maxObjects: 100)
+
+        guard let buffer = TestUtils.loadImageAsPixelBuffer(from: "Tests/assets/hard-hat.jpeg") else {
+            XCTFail("Failed to load hard-hat test image")
+            return
+        }
+
+        let (predictions, inferenceError) = await model.detect(pixelBuffer: buffer)
+        XCTAssertNil(inferenceError, "YOLOLite inference failed: \(inferenceError?.localizedDescription ?? "unknown error")")
+        XCTAssertNotNil(predictions, "Predictions should not be nil")
+        XCTAssertGreaterThan(predictions?.count ?? 0, 0, "Should have at least one detection")
+
+        if let predictions = predictions {
+            for prediction in predictions {
+                guard let objPrediction = prediction as? RFObjectDetectionPrediction else {
+                    XCTFail("Prediction should be of type RFObjectDetectionPrediction")
+                    continue
+                }
+
+                XCTAssertFalse(objPrediction.className.isEmpty, "Class name should not be empty")
+                XCTAssertGreaterThanOrEqual(objPrediction.confidence, 0.0, "Confidence should be >= 0")
+                XCTAssertLessThanOrEqual(objPrediction.confidence, 1.0, "Confidence should be <= 1")
+                XCTAssertGreaterThan(objPrediction.width, 0, "Width should be > 0")
+                XCTAssertGreaterThan(objPrediction.height, 0, "Height should be > 0")
+            }
+        }
+    }
+
+    #if canImport(UIKit)
+    func testYOLOLiteUIImageInference() async {
+        guard let model = await TestUtils.loadYOLOLiteModel() else {
+            XCTFail("Failed to load YOLOLite model")
+            return
+        }
+
+        model.configure(threshold: 0.4, overlap: 0.5, maxObjects: 100)
+
+        guard let image = TestUtils.loadUIImage(from: "Tests/assets/hard-hat.jpeg") else {
+            XCTFail("Failed to load hard-hat test image as UIImage")
+            return
+        }
+
+        let (predictions, inferenceError) = await model.detect(image: image)
+
+        XCTAssertNil(inferenceError, "UIImage YOLOLite inference failed: \(inferenceError?.localizedDescription ?? "unknown error")")
+        XCTAssertNotNil(predictions, "Predictions should not be nil")
+
+        if let predictions = predictions {
+            print("YOLOLite UIImage detected \(predictions.count) objects")
+
+            for prediction in predictions {
+                guard let objPrediction = prediction as? RFObjectDetectionPrediction else {
+                    XCTFail("Prediction should be of type RFObjectDetectionPrediction")
+                    continue
+                }
+
+                XCTAssertFalse(objPrediction.className.isEmpty, "Class name should not be empty")
+                XCTAssertGreaterThanOrEqual(objPrediction.confidence, 0.0, "Confidence should be >= 0")
+                XCTAssertLessThanOrEqual(objPrediction.confidence, 1.0, "Confidence should be <= 1")
+
+                print("YOLOLite detected: \(objPrediction.className) with confidence \(objPrediction.confidence)")
+            }
+        }
+    }
+    #endif
+
     // MARK: - RFDetr Model Tests
     
     func testLoadRFDetrModel() async {
