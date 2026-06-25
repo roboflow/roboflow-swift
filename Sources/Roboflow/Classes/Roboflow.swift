@@ -41,6 +41,12 @@ public class RoboflowMobile: NSObject {
     }
     
     func getModelClass(modelType: String) -> RFModel {
+        // RF-DETR segmentation emits boxes/scores/labels/masks — distinct from the
+        // YOLOv8-seg layout — so it needs its own decoder. Check it before the
+        // generic `seg` branch since the modelType contains both "detr" and "seg".
+        if (modelType.contains("detr") && modelType.contains("seg")) {
+            return RFDetrInstanceSegmentationModel()
+        }
         if (modelType.contains("seg")) {
             return RFInstanceSegmentationModel()
         }

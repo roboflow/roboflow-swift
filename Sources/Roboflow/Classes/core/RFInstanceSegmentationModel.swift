@@ -63,7 +63,7 @@ public class RFInstanceSegmentationModel: RFObjectDetectionModel {
             
             let pred = castDetectResults0.shape.count == 3 ? castDetectResults0 : castDetectResults1
             let proto = castDetectResults1.shape.count == 4 ? castDetectResults1 : castDetectResults0
-            
+
             let numMasks = 32
             let numCls = self.colors.count
             

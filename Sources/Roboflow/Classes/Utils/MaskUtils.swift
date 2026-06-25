@@ -28,8 +28,16 @@ struct MaskUtils {
         procH: Int, procW: Int // processing height and width
     ) -> MLTensor? {
         let (c, mh, mw) = protoShape
-        let shapedProto = MLShapedArray<Float>(proto)
-        var masks = MLTensor(shapedProto)
+        // The proto output can be Float16 or Float32 depending on the exported model.
+        // MLShapedArray<Float> can only wrap a Float32-backed MLMultiArray, so for a
+        // Float16 proto we wrap it as Float16 and cast the tensor up to Float32.
+        var masks: MLTensor
+        switch proto.dataType {
+        case .float16:
+            masks = MLTensor(MLShapedArray<Float16>(proto)).cast(to: Float.self)
+        default:
+            masks = MLTensor(MLShapedArray<Float>(proto))
+        }
         masks = masks.reshaped(to: [c, mh * mw])
         
         let rows = coeffs.count
@@ -187,10 +195,16 @@ struct MaskUtils {
     }
     
     /// parse a binary mask (0 or 255) to a set of border points that create a polygon outlining the mask's contour
-    static func maskToPolygons(
-        m: [UInt8],
-        width: Int,
-        h: Int) throws -> [[CGPoint]] {
+    static func maskToPolygons(m: [UInt8], width: Int, h: Int) throws -> [[CGPoint]] {
+        return try maskContourPolygons(m: m, width: width, h: h)
+    }
+}
+
+/// Parse a binary mask (0 or 255) into polygon contour rings, in pixel space of width×h
+/// with a top-left origin. Vision/CoreGraphics only (no MLTensor), so available below
+/// iOS 18 — shared by the YOLOv8-seg and RF-DETR-seg decoders.
+@available(macOS 13.0, iOS 16.0, *)
+func maskContourPolygons(m: [UInt8], width: Int, h: Int) throws -> [[CGPoint]] {
         var mask = m
         var height = h
         if width * height != mask.count {
@@ -245,7 +259,6 @@ struct MaskUtils {
             polygons.append(ring)
         }
         return polygons
-    }
 }
 
 /// materialize a MLTensor to a MLShapedArray for further processing
