@@ -195,10 +195,16 @@ struct MaskUtils {
     }
     
     /// parse a binary mask (0 or 255) to a set of border points that create a polygon outlining the mask's contour
-    static func maskToPolygons(
-        m: [UInt8],
-        width: Int,
-        h: Int) throws -> [[CGPoint]] {
+    static func maskToPolygons(m: [UInt8], width: Int, h: Int) throws -> [[CGPoint]] {
+        return try maskContourPolygons(m: m, width: width, h: h)
+    }
+}
+
+/// Parse a binary mask (0 or 255) into polygon contour rings, in pixel space of width×h
+/// with a top-left origin. Vision/CoreGraphics only (no MLTensor), so available below
+/// iOS 18 — shared by the YOLOv8-seg and RF-DETR-seg decoders.
+@available(macOS 13.0, iOS 16.0, *)
+func maskContourPolygons(m: [UInt8], width: Int, h: Int) throws -> [[CGPoint]] {
         var mask = m
         var height = h
         if width * height != mask.count {
@@ -253,7 +259,6 @@ struct MaskUtils {
             polygons.append(ring)
         }
         return polygons
-    }
 }
 
 /// materialize a MLTensor to a MLShapedArray for further processing
