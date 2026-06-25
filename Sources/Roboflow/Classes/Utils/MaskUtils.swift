@@ -28,8 +28,16 @@ struct MaskUtils {
         procH: Int, procW: Int // processing height and width
     ) -> MLTensor? {
         let (c, mh, mw) = protoShape
-        let shapedProto = MLShapedArray<Float>(proto)
-        var masks = MLTensor(shapedProto)
+        // The proto output can be Float16 or Float32 depending on the exported model.
+        // MLShapedArray<Float> can only wrap a Float32-backed MLMultiArray, so for a
+        // Float16 proto we wrap it as Float16 and cast the tensor up to Float32.
+        var masks: MLTensor
+        switch proto.dataType {
+        case .float16:
+            masks = MLTensor(MLShapedArray<Float16>(proto)).cast(to: Float.self)
+        default:
+            masks = MLTensor(MLShapedArray<Float>(proto))
+        }
         masks = masks.reshaped(to: [c, mh * mw])
         
         let rows = coeffs.count
