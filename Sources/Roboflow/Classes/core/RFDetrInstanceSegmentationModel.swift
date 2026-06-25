@@ -19,6 +19,7 @@
 import Foundation
 import CoreML
 import Vision
+import Accelerate
 
 public class RFDetrInstanceSegmentationModel: RFDetrObjectDetectionModel {
 
@@ -81,14 +82,27 @@ public class RFDetrInstanceSegmentationModel: RFDetrObjectDetectionModel {
         }
     }
 
+    @available(macOS 15.0, iOS 18.0, *)
     private func processOutputs(boxes: MLMultiArray, scores: MLMultiArray, labels: MLMultiArray,
                                 masks: MLMultiArray, imageWidth: Int, imageHeight: Int) throws -> [RFInstanceSegmentationPrediction] {
         let numDet = scores.shape[1].intValue
         let maskH  = masks.shape[2].intValue   // Hm
         let maskW  = masks.shape[3].intValue   // Wm
-        // Each mask covers the full image, so map mask-grid pixels straight to image pixels.
-        let sx = Float(imageWidth)  / Float(maskW)
-        let sy = Float(imageHeight) / Float(maskH)
+
+        // Reference postprocessing (lwdetr.py) bilinearly resizes the raw mask logits to
+        // the target image size and thresholds at logit > 0. We mirror that, but resize to
+        // a processing resolution chosen by maskProcessingMode (matching the YOLOv8-seg
+        // path) to bound cost; .quality resizes to full image size like the reference.
+        let outW: Int
+        let outH: Int
+        switch maskProcessingMode {
+        case .performance: outW = max(1, imageWidth / 2); outH = max(1, imageHeight / 2)
+        case .balanced:    outW = 640;                    outH = 640
+        case .quality:     outW = imageWidth;             outH = imageHeight
+        }
+        // Mask is full-image extent resized to (outH, outW); scale contour pts back to image.
+        let sx = Float(imageWidth)  / Float(outW)
+        let sy = Float(imageHeight) / Float(outH)
 
         var detections: [RFInstanceSegmentationPrediction] = []
 
@@ -109,21 +123,18 @@ public class RFDetrInstanceSegmentationModel: RFDetrObjectDetectionModel {
             let box = CGRect(x: CGFloat(cx - w / 2), y: CGFloat(cy - h / 2),
                              width: CGFloat(w), height: CGFloat(h))
 
-            // Mask: sigmoid(logits) > 0.5 -> binary 0/255 grid, then trace polygon.
-            var bin = [UInt8](repeating: 0, count: maskH * maskW)
+            // Read this query's raw mask logits [Hm, Wm].
+            var logits = [Float](repeating: 0, count: maskH * maskW)
             for r in 0..<maskH {
                 for c in 0..<maskW {
-                    let logit = Float(masks[[0, i, r, c] as [NSNumber]].doubleValue)
-                    let prob = 1.0 / (1.0 + exp(-logit))
-                    bin[r * maskW + c] = prob > 0.5 ? 255 : 0
+                    logits[r * maskW + c] = Float(masks[[0, i, r, c] as [NSNumber]].doubleValue)
                 }
             }
 
-            var polygon: [CGPoint] = []
-            if #available(iOS 18.0, macOS 15.0, *) {
-                let polys = (try? MaskUtils.maskToPolygons(m: bin, width: maskW, h: maskH)) ?? []
-                polygon = polys.max(by: { $0.count < $1.count }) ?? []
-            }
+            // Resize logits to (outH, outW) THEN threshold at 0 — matches the reference
+            // (resize-then-threshold), avoiding coarse-grid contour artifacts.
+            var polygon = maskPolygon(logits: logits, maskH: maskH, maskW: maskW,
+                                      outH: outH, outW: outW)
 
             // Downsample to maskMaxNumberPoints (same scheme as the YOLOv8-seg path).
             if polygon.count > maskMaxNumberPoints {
@@ -150,5 +161,30 @@ public class RFDetrInstanceSegmentationModel: RFDetrObjectDetectionModel {
         }
 
         return detections
+    }
+
+    /// Bilinearly resize raw mask logits [Hm, Wm] to (outH, outW), threshold at logit > 0
+    /// (== sigmoid > 0.5), then trace the largest contour. Mirrors lwdetr.py's
+    /// F.interpolate(..., mode="bilinear", align_corners=False) > 0.0. Returns contour
+    /// points in the (outH, outW) grid (top-left origin); the caller scales to image space.
+    @available(macOS 15.0, iOS 18.0, *)
+    private func maskPolygon(logits: [Float], maskH: Int, maskW: Int, outH: Int, outW: Int) -> [CGPoint] {
+        let shaped = MLShapedArray<Float>(scalars: logits, shape: [1, maskH, maskW])
+        let bin255: MLTensor = withMLTensorComputePolicy(anePreferred) {
+            var t = MLTensor(shaped)                                                  // [1, Hm, Wm]
+            t = t.resized(to: (outH, outW), method: .bilinear(alignCorners: false))   // [1, outH, outW]
+            return (t .> Float(0)) * Float(255)                                       // resize THEN threshold
+        }
+        guard let arr = try? shapedArraySync(bin255, as: Float.self) else { return [] }
+
+        var bin = [UInt8](repeating: 0, count: outH * outW)
+        arr.scalars.withUnsafeBufferPointer { src in
+            bin.withUnsafeMutableBufferPointer { dst in
+                vDSP_vfixu8(src.baseAddress!, 1, dst.baseAddress!, 1, vDSP_Length(outH * outW))
+            }
+        }
+
+        let polys = (try? MaskUtils.maskToPolygons(m: bin, width: outW, h: outH)) ?? []
+        return polys.max(by: { $0.count < $1.count }) ?? []
     }
 }
